@@ -75,6 +75,50 @@ impl Event {
         }
     }
 
+    /// Logged with HIGH PRIORITY whenever a Warden module's MD5
+    /// does not match the canonical Blizzard 3.3.5a Win module
+    /// (`79C0768D657977D697E10BAD956CCED1`). Greppable for
+    /// monitoring; the operator should treat any occurrence as
+    /// an immediate "this server is pushing custom bytes into my
+    /// process" signal.
+    pub fn non_canonical_warden(verdict: &Verdict) -> Self {
+        let md5 = verdict
+            .md5
+            .iter()
+            .fold(String::new(), |mut s, b| {
+                use std::fmt::Write;
+                let _ = write!(s, "{:02x}", b);
+                s
+            });
+        let imports_preview = verdict
+            .imports
+            .iter()
+            .take(16)
+            .map(|s| sanitize(s))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sections_preview = verdict
+            .sections
+            .iter()
+            .take(8)
+            .map(|s| sanitize(s))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Self {
+            kind: "non_canonical_warden",
+            fields: vec![
+                ("md5".into(), md5),
+                ("verdict".into(), sanitize(&verdict.reason)),
+                ("imports_first_16".into(), imports_preview),
+                ("sections_first_8".into(), sections_preview),
+                (
+                    "note".into(),
+                    "MODULE NOT MATCHING CANONICAL BLIZZARD MD5 (79C0768D657977D697E10BAD956CCED1) -- saved to %APPDATA%\\wow-rce-watcher\\modules\\<md5>.bin for offline analysis".into(),
+                ),
+            ],
+        }
+    }
+
     /// Logged from `dump_module_bytes` after a server-pushed PE
     /// buffer has been written to disk for offline analysis. The
     /// operator can pull `%APPDATA%\wow-rce-watcher\modules\<md5>.bin`

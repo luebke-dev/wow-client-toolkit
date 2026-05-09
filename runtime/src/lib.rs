@@ -202,7 +202,66 @@ extern "C" fn hook_entry() {
 extern "C" fn inspect_and_decide(out_ptr: *const u8, buf_ptr: *const u8) -> u32 {
     let verdict = inspect_buffer(buf_ptr);
     log::write_event(&log::Event::module_seen_with_ctx(&verdict, out_ptr as usize));
+
+    // Non-canonical Warden module: log a separate high-priority
+    // event (easy to grep for) and pop a desktop alert so the
+    // operator IMMEDIATELY knows the server is pushing a custom
+    // module. The legit Blizzard 3.3.5a Win Warden module has a
+    // bit-identical MD5 across years of private-server use; any
+    // other hash is at minimum suspicious.
+    let is_canonical_blizzard = verdict.md5
+        == [
+            0x79, 0xC0, 0x76, 0x8D, 0x65, 0x79, 0x77, 0xD6, 0x97, 0xE1, 0x0B, 0xAD, 0x95, 0x6C,
+            0xCE, 0xD1,
+        ];
+    let has_payload = verdict.md5 != [0u8; 16]; // [0; 16] = parse failed, not a real MD5
+    if has_payload && !is_canonical_blizzard {
+        log::write_event(&log::Event::non_canonical_warden(&verdict));
+        notify_user_non_canonical(&verdict);
+    }
+
     1
+}
+
+/// Pop a Windows MessageBox describing the non-canonical Warden
+/// module. Best-effort: failures to open the box are silently
+/// swallowed (e.g. running as a service with no interactive
+/// desktop). Threaded so the original Wow.exe call path doesn't
+/// stall on the modal dialog.
+fn notify_user_non_canonical(verdict: &decision::Verdict) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONWARNING, MB_OK};
+    let mut hex = String::with_capacity(32);
+    for b in &verdict.md5 {
+        use std::fmt::Write;
+        let _ = write!(hex, "{:02x}", b);
+    }
+    let imports_preview: String = verdict.imports.iter().take(8).cloned().collect::<Vec<_>>().join(", ");
+    let body = format!(
+        "Wow.exe loaded a NON-CANONICAL Warden module.\n\n\
+         MD5: {}\n\
+         Verdict: {}\n\
+         Imports (first 8): {}\n\n\
+         Canonical Blizzard 3.3.5a Win Warden MD5 is\n\
+         79C0768D657977D697E10BAD956CCED1.\n\n\
+         The full module bytes were saved to\n\
+         %APPDATA%\\wow-rce-watcher\\modules\\{}.bin\n\
+         for offline inspection.\0",
+        hex, verdict.reason, imports_preview, hex
+    );
+    let title = "wow-client-toolkit: non-canonical Warden module\0";
+    // Spawn so we don't block the hook path.
+    let body_owned = body.clone();
+    let title_owned = title.to_string();
+    std::thread::spawn(move || {
+        unsafe {
+            MessageBoxA(
+                0,
+                body_owned.as_ptr(),
+                title_owned.as_ptr(),
+                MB_OK | MB_ICONWARNING,
+            );
+        }
+    });
 }
 
 fn inspect_buffer(buf: *const u8) -> decision::Verdict {
