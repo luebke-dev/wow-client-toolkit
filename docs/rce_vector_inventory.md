@@ -92,6 +92,8 @@ unconstrained.
 | `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | candidate -- BG queue list, `[ECX + ESI*0x4]` |
 | `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | candidate -- forced reactions per faction, two writes per iteration |
 | `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | confirmed shape, `[EBX*0x8 + 0x0]` |
+| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | candidate -- arena team member list |
+| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | candidate -- arena team stats list |
 | `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | candidate -- LFG state |
 | `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | candidate (same handler shared with 0x367/0x369) |
 | `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | candidate (same handler) |
@@ -108,7 +110,7 @@ or non-packet-reachable (init code, asset loaders).
 
 ### Mitigation strategy options
 
-For per-site patches the byte cost grows linearly. With **11
+For per-site patches the byte cost grows linearly. With **13
 confirmed packet-reachable candidates** the per-site approach is
 fragile (every patch needs its own pre-byte verification + a
 loop-comparison cap byte). A **universal mitigation** is now

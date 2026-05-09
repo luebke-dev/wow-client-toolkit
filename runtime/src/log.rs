@@ -124,6 +124,46 @@ impl Event {
         }
     }
 
+    /// Logged once per attempted detour install on a Win32 API.
+    pub fn api_hook_installed(dll: &str, fn_name: &str, addr: usize) -> Self {
+        Self {
+            kind: "api_hook_installed",
+            fields: vec![
+                ("dll".into(), dll.to_string()),
+                ("fn".into(), fn_name.to_string()),
+                ("addr".into(), format!("0x{:08x}", addr)),
+            ],
+        }
+    }
+
+    /// Logged when a detour install fails (DLL not loaded,
+    /// non-hot-patchable prologue, JMP write failed).
+    pub fn api_hook_failed(dll: &str, fn_name: &str, reason: &str) -> Self {
+        Self {
+            kind: "api_hook_failed",
+            fields: vec![
+                ("dll".into(), dll.to_string()),
+                ("fn".into(), fn_name.to_string()),
+                ("reason".into(), sanitize(reason)),
+            ],
+        }
+    }
+
+    /// Logged from each detour observe callback. `kv` is the
+    /// per-API set of arg name + stringified value pairs we want
+    /// to record (path, URL, headers, etc).
+    pub fn api_call(api: &'static str, kv: &[(&str, &str)]) -> Self {
+        let mut fields = Vec::with_capacity(kv.len() + 1);
+        fields.push(("api".into(), api.into()));
+        for (k, v) in kv {
+            fields.push(((*k).to_string(), sanitize(v)));
+        }
+        Self {
+            kind: "api_call",
+            fields,
+        }
+    }
+
     pub fn module_seen_with_ctx(verdict: &Verdict, out_ctx: usize) -> Self {
         let mut e = Self::module_seen(verdict);
         e.fields.push(("out_ctx".into(), format!("0x{:08x}", out_ctx)));

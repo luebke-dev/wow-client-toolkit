@@ -33,6 +33,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use windows_sys::Win32::Foundation::{BOOL, HMODULE, TRUE};
 use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
+mod api_hooks;
 mod bg_handler;
 mod decision;
 mod hook;
@@ -122,6 +123,12 @@ fn install() -> Result<(), InstallError> {
             "bg-handler hook install failed: {e}"
         )));
     }
+
+    // Install detour-style observe hooks on file-IO + HTTP APIs.
+    // Catches both Wow's own IAT-routed calls AND server-pushed
+    // shellcode that resolves these APIs via GetProcAddress
+    // (the canonical browser-history exfil path).
+    api_hooks::install_all();
 
     Ok(())
 }
