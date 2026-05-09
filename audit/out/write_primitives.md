@@ -8,9 +8,12 @@ MSG_BATTLEGROUND_PLAYER_POSITIONS arbitrary-write.
 
 ## 1. Write-primitive functions (seeded from CDataStore::GetInt64)
 
-- `CDataStore::GetInt64` @ `0x0047B400` (size 58 bytes)
-- `CDataStore::GetInt32` @ `0x0047B450` -- NOT defined as a function (run autoanalysis)
-- `CDataStore::GetFloat` @ `0x0047B330` -- NOT defined as a function (run autoanalysis)
+- `CDataStore::GetUInt8` @ `0x0047B340` (size 49 bytes)
+- `CDataStore::GetUInt16` @ `0x0047B380` (size 51 bytes)
+- `CDataStore::GetUInt32` @ `0x0047B3C0` (size 49 bytes)
+- `CDataStore::GetUInt64` @ `0x0047B400` (size 58 bytes)
+- `CDataStore::GetFloat` @ `0x0047B440` (size 49 bytes)
+- `CDataStore::GetBytes` @ `0x0047B480` (size 224 bytes)
 
 ## 2. Sister write-primitive candidates (same-prototype neighbors)
 
@@ -31,7 +34,302 @@ machine code:
 Score >= 5 = same shape as the BG vuln. Score 3-4 = worth a manual
 look. Score 0-2 = local-variable destination, safe.
 
-### Callers of `CDataStore::GetInt64` @ `0x0047B400`
+### Callers of `CDataStore::GetUInt8` @ `0x0047B340`
+
+Total callers: 504. Top 30 by danger score:
+
+- score=**7** [DANGER] call @ 005a49a5 in `FUN_005a4800` @ 005a4800
+    - scaled-index LEA: `[EAX + EAX*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c1dc10]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0080e247 in `FUN_0080e1b0` @ 0080e1b0
+    - scaled-index LEA: `[EDI*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0080e2b3 in `FUN_0080e1b0` @ 0080e1b0
+    - scaled-index LEA: `[EDX + EDI*0x8]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0080e2db in `FUN_0080e1b0` @ 0080e1b0
+    - scaled-index LEA: `[EDX + EDI*0x8]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0055c9a2 in `FUN_0055bdc0` @ 0055bdc0
+    - scaled-index LEA: `[ECX + ESI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00acdc34]`) -- candidate loop bound
+- score=**5** [DANGER] call @ 005cba6a in `FUN_005cb9f0` @ 005cb9f0
+    - scaled-index LEA: `[EAX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 006d0378 in `FUN_006d0240` @ 006d0240
+    - scaled-index LEA: `[EDI*0x4 + 0xc9d6d0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 006d5765 in `FUN_006d53b0` @ 006d53b0
+    - scaled-index LEA: `[EAX + EAX*0x2]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 00704746 in `FUN_00704680` @ 00704680
+    - scaled-index LEA: `[ECX*0x4 + 0xca0ff0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 0075571d in `FUN_00755630` @ 00755630
+    - scaled-index LEA: `[EDI + ECX*0x4 + 0x4c]`
+    - function contains a backward conditional jump (loop)
+- score=**4** [REVIEW] call @ 0073c99b in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073caa4 in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005f79e4 in `FUN_005f79a0` @ 005f79a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c24928]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005f79f2 in `FUN_005f79a0` @ 005f79a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c24928]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005f7a02 in `FUN_005f79a0` @ 005f79a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c24928]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005f7a47 in `FUN_005f79a0` @ 005f79a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c24928]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004d73c9 in `FUN_004d73a0` @ 004d73a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00d439bc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004d7118 in `FUN_004d7100` @ 004d7100
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00d439bc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004e5a9b in `FUN_004e5a50` @ 004e5a50
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00b6b480]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004e5b08 in `FUN_004e5a50` @ 004e5a50
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00b6b480]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004e5b30 in `FUN_004e5a50` @ 004e5a50
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00b6b480]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 004e5b6d in `FUN_004e5a50` @ 004e5a50
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00b6b480]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0050039e in `FUN_00500380` @ 00500380
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005003a9 in `FUN_00500380` @ 00500380
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005010bf in `FUN_00501030` @ 00501030
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcfae8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005010e3 in `FUN_00501030` @ 00501030
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcfae8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005039ed in `FUN_00503990` @ 00503990
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00503abd in `FUN_00503990` @ 00503990
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0050430e in `FUN_005042f0` @ 005042f0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcfb6c]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0050bedf in `FUN_0050be70` @ 0050be70
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+
+### Callers of `CDataStore::GetUInt16` @ `0x0047B380`
+
+Total callers: 56. Top 30 by danger score:
+
+- score=**4** [REVIEW] call @ 0056b445 in `FUN_0056b280` @ 0056b280
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ace500]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0056c04b in `FUN_0056bf30` @ 0056bf30
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ace4fc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00571cf4 in `FUN_00571c50` @ 00571c50
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005d6c0c in `FUN_005d6b90` @ 005d6b90
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c23538]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005d6cf7 in `FUN_005d6b90` @ 005d6b90
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c23538]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006cdfaa in `FUN_006cdf30` @ 006cdf30
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c9eae0]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006cdfd6 in `FUN_006cdf30` @ 006cdf30
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c9eae0]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006cdffb in `FUN_006cdf30` @ 006cdf30
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c9eae0]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00526977 in `FUN_00526530` @ 00526530
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006df06d in `FUN_006df050` @ 006df050
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c9eb44]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006df0f7 in `FUN_006df050` @ 006df050
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c9eb44]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006df10b in `FUN_006df050` @ 006df050
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c9eb44]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006df129 in `FUN_006df050` @ 006df050
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c9eb44]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006df134 in `FUN_006df050` @ 006df050
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c9eb44]`) -- candidate loop bound
+- score=**2** [ok] call @ 00465b70 in `FUN_00465b20` @ 00465b20
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 00465cbd in `FUN_00465b20` @ 00465b20
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 00465dcc in `FUN_00465b20` @ 00465b20
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 005c9866 in `FUN_005c9740` @ 005c9740
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 00632e32 in `FUN_00632e00` @ 00632e00
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 0098d13c in `FUN_0098d090` @ 0098d090
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006ccf3b in `FUN_006ccf10` @ 006ccf10
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006ccf85 in `FUN_006ccf10` @ 006ccf10
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfa96 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb32 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb46 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb5a in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb6e in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb85 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfb93 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+- score=**2** [ok] call @ 006cfc78 in `FUN_006cf9b0` @ 006cf9b0
+    - function contains a backward conditional jump (loop)
+
+### Callers of `CDataStore::GetUInt32` @ `0x0047B3C0`
+
+Total callers: 1469. Top 30 by danger score:
+
+- score=**7** [DANGER] call @ 0054e4fc in `FUN_0054e390` @ 0054e390
+    - scaled-index LEA: `[ECX + ESI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bea5c8]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0059ea1b in `FUN_0059e880` @ 0059e880
+    - scaled-index LEA: `[EDI + EDI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 005a4974 in `FUN_005a4800` @ 005a4800
+    - scaled-index LEA: `[EAX + EAX*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c1dc10]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 005a4a41 in `FUN_005a4800` @ 005a4800
+    - scaled-index LEA: `[EAX + EAX*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c1dc10]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 005a7624 in `FUN_005a7250` @ 005a7250
+    - scaled-index LEA: `[ECX + EAX*0x4 + 0x18]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c1dc10]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 005d164f in `FUN_005d15d0` @ 005d15d0
+    - scaled-index LEA: `[EDX + ESI*0x8]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c23498]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 005d1661 in `FUN_005d15d0` @ 005d15d0
+    - scaled-index LEA: `[EDX + ESI*0x8]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c23498]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d055f in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff3c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d056e in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff3c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d057d in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff3c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d0590 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff3c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d05cf in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff7c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d05de in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff7c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d05ed in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff7c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d0600 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff7c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d060b in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff2c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d0616 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff6c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d06f2 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d0700 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d6d9b in `FUN_006d6d20` @ 006d6d20
+    - scaled-index LEA: `[EDI*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0055c98c in `FUN_0055bdc0` @ 0055bdc0
+    - scaled-index LEA: `[ECX + ESI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00acdc34]`) -- candidate loop bound
+- score=**5** [DANGER] call @ 0054b450 in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EDI*0x8 + 0xbea180]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005a2da8 in `FUN_005a2d50` @ 005a2d50
+    - scaled-index LEA: `[ECX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005a2db6 in `FUN_005a2d50` @ 005a2d50
+    - scaled-index LEA: `[ECX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005a2dc4 in `FUN_005a2d50` @ 005a2d50
+    - scaled-index LEA: `[ECX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005a3e96 in `FUN_005a3e10` @ 005a3e10
+    - scaled-index LEA: `[ECX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005a3ea4 in `FUN_005a3e10` @ 005a3e10
+    - scaled-index LEA: `[ECX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005cba40 in `FUN_005cb9f0` @ 005cb9f0
+    - scaled-index LEA: `[EAX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005cba5b in `FUN_005cb9f0` @ 005cb9f0
+    - scaled-index LEA: `[EAX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 005cba99 in `FUN_005cb9f0` @ 005cb9f0
+    - scaled-index LEA: `[EAX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+
+### Callers of `CDataStore::GetUInt64` @ `0x0047B400`
 
 Total callers: 284. Top 30 by danger score:
 
@@ -130,9 +428,205 @@ Total callers: 284. Top 30 by danger score:
     - function contains a backward conditional jump (loop)
     - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
 
+### Callers of `CDataStore::GetFloat` @ `0x0047B440`
+
+Total callers: 185. Top 30 by danger score:
+
+- score=**7** [DANGER] call @ 0073ce86 in `FUN_0073c8e0` @ 0073c8e0
+    - scaled-index LEA: `[EDI + EDI*0x2]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0073ce91 in `FUN_0073c8e0` @ 0073c8e0
+    - scaled-index LEA: `[EDI + EDI*0x2]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0073ce9c in `FUN_0073c8e0` @ 0073c8e0
+    - scaled-index LEA: `[EDI + EDI*0x2]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d0621 in `FUN_006d0460` @ 006d0460
+    - scaled-index LEA: `[EBP + EDI*0x4 + 0xffffff6c]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**5** [DANGER] call @ 0054b42b in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EDI*0x8 + 0xbea180]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 0054b43a in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EDI*0x8 + 0xbea180]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 0054b4a2 in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EAX*0x8 + 0xbea170]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 0054b4b4 in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EAX*0x8 + 0xbea170]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 006d0c9b in `FUN_006d0ab0` @ 006d0ab0
+    - scaled-index LEA: `[EBP + EDI*0x4 + -0x60]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 007556a7 in `FUN_00755630` @ 00755630
+    - scaled-index LEA: `[EDI + EBX*0x4 + 0x1c]`
+    - function contains a backward conditional jump (loop)
+- score=**4** [REVIEW] call @ 0073c96f in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073c97a in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073c985 in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073cace in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073ce07 in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073ce12 in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073ce1d in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00571d93 in `FUN_00571c50` @ 00571c50
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0059ea27 in `FUN_0059e880` @ 0059e880
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005a07e5 in `FUN_005a0790` @ 005a0790
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f3e8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc885 in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006e3ded in `FUN_006e2e90` @ 006e2e90
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bfa8d8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006e3df8 in `FUN_006e2e90` @ 006e2e90
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bfa8d8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006e3e03 in `FUN_006e2e90` @ 006e2e90
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bfa8d8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0080e3a6 in `FUN_0080e1b0` @ 0080e1b0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0073ca5b in `FUN_0073c8e0` @ 0073c8e0
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00ca1194]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00526a86 in `FUN_00526530` @ 00526530
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00526e6b in `FUN_00526530` @ 00526530
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006e36be in `FUN_006e2e90` @ 006e2e90
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bfa8d8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006e36c9 in `FUN_006e2e90` @ 006e2e90
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bfa8d8]`) -- candidate loop bound
+
+### Callers of `CDataStore::GetBytes` @ `0x0047B480`
+
+Total callers: 162. Top 30 by danger score:
+
+- score=**7** [DANGER] call @ 0059e9ef in `FUN_0059e880` @ 0059e880
+    - scaled-index LEA: `[EDI + EDI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0059ea03 in `FUN_0059e880` @ 0059e880
+    - scaled-index LEA: `[EDI + EDI*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
+- score=**5** [DANGER] call @ 006d0393 in `FUN_006d0240` @ 006d0240
+    - scaled-index LEA: `[EDI*0x4 + 0xc9d5d0]`
+    - function contains a backward conditional jump (loop)
+- score=**4** [REVIEW] call @ 005f7a60 in `FUN_005f79a0` @ 005f79a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c24928]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005003c7 in `FUN_00500380` @ 00500380
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00501cff in `FUN_00501c70` @ 00501c70
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00d37e9c]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005039ac in `FUN_00503990` @ 00503990
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00bcf094]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0050432c in `FUN_005042f0` @ 005042f0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00bcfb6c]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0050c032 in `FUN_0050be70` @ 0050be70
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0056b3b9 in `FUN_0056b280` @ 0056b280
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ace500]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00571db7 in `FUN_00571c50` @ 00571c50
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 00571dca in `FUN_00571c50` @ 00571c50
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 0057678a in `FUN_00576730` @ 00576730
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00beb65c]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005a1284 in `FUN_005a11a0` @ 005a11a0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0f6c0]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005a739d in `FUN_005a7250` @ 005a7250
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c1dc10]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005a73b0 in `FUN_005a7250` @ 005a7250
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c1dc10]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005af5dc in `FUN_005af490` @ 005af490
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00acfc08]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005af5ec in `FUN_005af490` @ 005af490
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00acfc08]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005c2c7d in `FUN_005c29c0` @ 005c29c0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad0344]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005c363e in `FUN_005c29c0` @ 005c29c0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad0344]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc657 in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc68a in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc7d2 in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc8c2 in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 005cc8fa in `FUN_005cc5d0` @ 005cc5d0
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c22adc]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006b87b8 in `FUN_006b8720` @ 006b8720
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c7bfe8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006b87c8 in `FUN_006b8720` @ 006b8720
+    - function contains a backward conditional jump (loop)
+    - reads global (`[0x00c7bfe8]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006d04a2 in `FUN_006d0460` @ 006d0460
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006d04b5 in `FUN_006d0460` @ 006d0460
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+- score=**4** [REVIEW] call @ 006d04c8 in `FUN_006d0460` @ 006d0460
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c0d648]`) -- candidate loop bound
+
 ## 4. Top-3 danger sites decompiled
 
-### `FUN_005a4800` @ 005a4800 -- score 7 -- call site 005a4900
+### `FUN_005a4800` @ 005a4800 -- score 7 -- call site 005a49a5
 
 ```c
 
@@ -220,88 +714,7 @@ undefined4 FUN_005a4800(void)
 
 ```
 
-### `FUN_006d6d20` @ 006d6d20 -- score 7 -- call site 006d6d8d
-
-```c
-
-/* WARNING: Function: __alloca_probe_16 replaced with injection: alloca_probe */
-/* WARNING: Unable to track spacebase fully for stack */
-/* WARNING: Type propagation algorithm not settling */
-
-undefined4 FUN_006d6d20(uint param_1)
-
-{
-  undefined1 *puVar1;
-  char cVar2;
-  byte bVar3;
-  uint uVar4;
-  uint auStack_c44 [8];
-  undefined4 *apuStack_c24 [766];
-  undefined4 local_20;
-  undefined4 local_1c;
-  undefined4 local_18;
-  undefined4 local_14;
-  undefined4 local_10;
-  undefined1 *local_c;
-  undefined1 *local_8;
-  
-  apuStack_c24[0x2fd] = &local_20;
-  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d37;
-  FUN_0047b400();
-  apuStack_c24[0x2fd] = &local_18;
-  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d42;
-  FUN_0047b400();
-  apuStack_c24[0x2fd] = &local_10;
-  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d4d;
-  FUN_0047b3c0();
-  apuStack_c24[0x2fd] = &param_1;
-  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d58;
-  FUN_0047b340();
-  uVar4 = param_1 & 0xff;
-  apuStack_c24[0x2fd] = (undefined4 *)0x6d6d68;
-  local_c = &stack0xffffffd4 + uVar4 * -8;
-  apuStack_c24[uVar4 * 0xfffffffe + 0x2fd] = (undefined4 *)0x6d6d77;
-  bVar3 = 0;
-  local_8 = &stack0xffffffd4 + uVar4 * -0xc;
-  puVar1 = &stack0xffffffd4 + uVar4 * -0xc;
-  if ((byte)param_1 != '\0') {
-    do {
-      apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)(local_c + (uint)bVar3 * 8);
-      auStack_c44[uVar4 * -3 + 0x304] = 0x6d6d92;
-      FUN_0047b400();
-      apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)(local_8 + (uint)bVar3 * 4);
-      auStack_c44[uVar4 * -3 + 0x304] = 0x6d6da0;
-      FUN_0047b3c0();
-      bVar3 = bVar3 + 1;
-      puVar1 = local_8;
-    } while (bVar3 < (byte)param_1);
-  }
-  local_8 = puVar1;
-  apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)0x1;
-  auStack_c44[uVar4 * -3 + 0x304] = local_14;
-  auStack_c44[uVar4 * -3 + 0x303] = local_18;
-  auStack_c44[uVar4 * -3 + 0x302] = 0x6d6dbd;
-  cVar2 = FUN_006b52e0();
-  if (cVar2 == '\0') {
-    apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)local_14;
-    auStack_c44[uVar4 * -3 + 0x304] = local_18;
-    auStack_c44[uVar4 * -3 + 0x303] = local_10;
-    auStack_c44[uVar4 * -3 + 0x302] = local_1c;
-    auStack_c44[uVar4 * -3 + 0x301] = local_20;
-    auStack_c44[uVar4 * -3 + 0x300] = 0x6d6dda;
-    FUN_005ceef0();
-    auStack_c44[uVar4 * -3 + 0x300] = (uint)local_8;
-    auStack_c44[uVar4 * -3 + 0x2ff] = (uint)local_c;
-    auStack_c44[uVar4 * -3 + 0x2fe] = param_1;
-    auStack_c44[uVar4 * -3 + 0x2fd] = 0x6d6deb;
-    FUN_005cf650();
-  }
-  return 1;
-}
-
-```
-
-### `FUN_0080e1b0` @ 0080e1b0 -- score 7 -- call site 0080e231
+### `FUN_0080e1b0` @ 0080e1b0 -- score 7 -- call site 0080e247
 
 ```c
 
@@ -424,4 +837,129 @@ void FUN_0080e1b0(int param_1)
   int local_44;
   uint local_40;
   int local_3c;
+```
+
+### `FUN_0055bdc0` @ 0055bdc0 -- score 7 -- call site 0055c9a2
+
+```c
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+undefined4 FUN_0055bdc0(undefined4 param_1,uint param_2,undefined4 param_3,undefined4 param_4)
+
+{
+  char cVar1;
+  undefined4 uVar2;
+  undefined4 *puVar3;
+  int iVar4;
+  int iVar5;
+  uint uVar6;
+  undefined4 *puVar7;
+  byte bVar8;
+  int iVar9;
+  uint uVar10;
+  int iVar11;
+  int *piVar12;
+  undefined8 uVar13;
+  undefined1 local_554 [1024];
+  undefined1 local_154;
+  char local_153;
+  char local_152;
+  undefined1 local_150;
+  undefined1 local_14f;
+  undefined1 local_14e [18];
+  uint local_13c;
+  undefined1 local_138 [256];
+  undefined4 local_38;
+  undefined4 local_34;
+  undefined4 local_30;
+  undefined4 local_2c;
+  undefined4 local_28;
+  undefined4 local_24;
+  int local_20;
+  char local_19;
+  undefined4 local_18;
+  undefined4 *local_14;
+  undefined4 *local_10;
+  char local_9;
+  byte local_8;
+  char local_7;
+  char local_6;
+  byte local_5;
+  
+  uVar2 = param_4;
+  if ((int)param_2 < 0x294) {
+    if (param_2 == 0x293) {
+      FUN_0047b3c0(&param_2);
+      uVar10 = param_2;
+      FUN_005eeb70("LFGMessage: LFG_OFFER_CONTINUE - Slot: %u",param_2);
+      uVar10 = uVar10 & 0xffffff;
+      if ((int)uVar10 < DAT_00ad4050) {
+        return 1;
+      }
+      if (DAT_00ad404c < (int)uVar10) {
+        return 1;
+      }
+      puVar7 = *(undefined4 **)(DAT_00ad4060 + (uVar10 - DAT_00ad4050) * 4);
+      if (puVar7 == (undefined4 *)0x0) {
+        return 1;
+      }
+      FUN_0081b530(0x203,"%s%d%d",puVar7[1],*puVar7,puVar7[10]);
+      return 1;
+    }
+    if (param_2 == 0x1ff) {
+      FUN_00558a70();
+      FUN_0047b3c0(&DAT_00acdc18);
+      FUN_0047b3c0(&DAT_00acdc1c);
+      FUN_00401140(&DAT_00acdc20);
+      FUN_0047b3c0(&DAT_00acdc24);
+      FUN_0047b3c0(&DAT_00acdc28);
+      FUN_0047b3c0(&DAT_00acdc2c);
+      FUN_0047b3c0(&DAT_00acdc30);
+      FUN_0047b3c0(&DAT_00acdc34);
+      FUN_005eeb70("LFGMessage: LFG_PLAYER_REWARD - Random Slot: %u, Actual Slot: %u, First: %d, Strangers: %u, Base Money: %d, Base XP: %d, Var Money: %d, Var XP: %d"
+                   ,DAT_00acdc18,DAT_00acdc1c,DAT_00acdc20,DAT_00acdc24,DAT_00acdc28,DAT_00acdc2c,
+                   DAT_00acdc30,DAT_00acdc34);
+      FUN_0047b340((int)&param_2 + 3);
+      local_10 = (undefined4 *)0x0;
+      if (param_2._3_1_ != '\0') {
+        do {
+          puVar3 = (undefined4 *)
+                   FUN_0076e540(0x14,
+                                "d:\\buildserver\\wow\\1\\work\\wow-code\\branches\\wow-patch-3_3_5_a-bnet\\wow\\source\\ui\\LFGInfo.h"
+                                ,0x2eb,0);
+          puVar7 = (undefined4 *)0x0;
+          if (puVar3 != (undefined4 *)0x0) {
+            *puVar3 = 0;
+            puVar3[1] = 0;
+            puVar7 = puVar3;
+          }
+          FUN_0086e200(puVar7);
+          FUN_0047b3c0(puVar7 + 2);
+          local_14 = puVar7 + 3;
+          FUN_0047b3c0(local_14);
+          FUN_0047b3c0(puVar7 + 4);
+          FUN_005eeb70("LFG_PLAYER_REWARD: Receiving Item %u, Display %u, Quantity: %u",puVar7[2],
+                       *local_14,puVar7[4]);
+          local_10 = (undefined4 *)((int)local_10 + 1);
+        } while (local_10 < param_2 >> 0x18);
+      }
+      iVar4 = DAT_00acdc24 * DAT_00acdc34;
+      iVar9 = DAT_00acdc24 * DAT_00acdc30;
+      if (0 < DAT_00acdc2c) {
+        FUN_005216f0(0xa1,DAT_00acdc2c);
+      }
+      if (0 < iVar4) {
+        FUN_005216f0(0xa1,iVar4);
+      }
+      if (0 < DAT_00acdc28) {
+        FUN_007e7d80(DAT_00acdc28,local_554,0x400,&DAT_009fc494);
+        FUN_005216f0(0xa4,local_554);
+      }
+      if (0 < iVar9) {
+        FUN_007e7d80(iVar9,local_554,0x400,&DAT_009fc494);
+        FUN_005216f0(0xa4,local_554);
+      }
+      FUN_0081b530(0x205,0);
+      return 1;
 ```

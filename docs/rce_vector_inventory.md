@@ -53,9 +53,16 @@ The same shape can exist in any handler that uses any of the
 
 | Function | VA | Writes |
 |---|---|---|
-| `CDataStore::GetFloat` | `0x0047B330` | 4 bytes |
-| `CDataStore::GetInt64` | `0x0047B400` | 8 bytes |
-| `CDataStore::GetInt32` | `0x0047B450` | 4 bytes |
+| `CDataStore::GetUInt8`  | `0x0047B340` | 1 byte |
+| `CDataStore::GetUInt16` | `0x0047B380` | 2 bytes |
+| `CDataStore::GetUInt32` | `0x0047B3C0` | 4 bytes |
+| `CDataStore::GetUInt64` | `0x0047B400` | 8 bytes (the writeup-named "GetInt64") |
+| `CDataStore::GetFloat`  | `0x0047B440` | 4 bytes |
+| `CDataStore::GetBytes`  | `0x0047B480` | variable (`memcpy`-style; bug class is "destination + length both attacker-controlled") |
+
+All 6 share the canonical prologue `55 8B EC 56 8B F1 8B 46 14 6A
+<SIZE> 50 E8 ...` -- enumerated by walking function prologues in
+`[0x0047B000-0x0047C000]` for the `push <SIZE>` immediate.
 
 `audit/scripts/find_write_primitives.py` enumerates every caller
 of all three, scores each call site by:
@@ -68,19 +75,75 @@ of all three, scores each call site by:
 See `audit/out/write_primitives.md` for the latest ranked list. Score >= 5
 sites are candidates for the same loop-cap mitigation. Status: AUDIT.
 
-### Confirmed sister vulnerabilities (same shape)
+### Confirmed packet-reachable sister vulnerabilities
 
-The audit script flagged the following call sites at score >= 5.
-Manual decompile review classifies each:
+Refined audit (6 write primitives: GetUInt8/16/32/64, GetFloat,
+GetBytes -- all the CDataStore::Get* family) plus a binary
+search for each candidate handler's literal-address byte sequence
+followed by `push handler; push opcode; call RegisterHandler`
+identifies the following packet-reachable handlers with the same
+shape as the BG-positions vuln. Each is a candidate RCE primitive
+pending decompile-level confirmation that the loop bound is
+unconstrained.
 
-| Function | Call site | Verdict | Detail |
+| Opcode | AC name | Handler | Status |
 |---|---|---|---|
-| `FUN_0054b3f0` | `0x0054b41c` | KNOWN (BG-positions) | Patch 3 closes |
-| `FUN_0054b3f0` | `0x0054b490` | KNOWN (BG-positions, 2nd inner write) | Patch 3 closes (same outer loop) |
-| `FUN_005a4800` | `0x005a4900` | **CONFIRMED VULN** -- opcode `0x03EE` (`MSG_GUILD_BANK_LOG_QUERY`) | Identified by `identify_handler.py` + binary search for the registration call at file offset 0x001a6be4 (`push 0x005A4800; push 0x03EE; call`). Loop bound `local_6` read from packet via `GetInt32(&local_6)` at line 157 of decompile; inner loop writes 40-byte structs to `&DAT_00c0f900 + (local_5*25 + iVar5) * 0x28` with NO bounds check on `local_6`. Server picks count, client writes per-element struct to attacker-controlled address. **No mitigation in this repo yet.** |
-| `FUN_00800470` | `0x008004c6` | **CONFIRMED VULN** -- opcode `0x0330` (`SMSG_SPELL_UPDATE_CHAIN_TARGETS`) | Found at file offset 0x0040f64e (`push 0x00800470; push 0x0330; call`). LEA `[EBX*0x8 + 0x0]`. Server-controlled chain-target list; same shape. **No mitigation yet.** |
-| `FUN_006d6d20` | `0x006d6d8d` | UNREACHED | No static address reference in the binary. Either dead code or runtime-built vtable. Loop bound is global `0x00c79f98`. Lower attack-surface assumption. |
-| `FUN_0080e1b0` | `0x0080e231 + 0x0080e2a4` | UNREACHED | No static address reference; high-VA region. Likely init-time / addon-system code. |
+| `0x121` | `SMSG_TRADE_STATUS_EXTENDED` | `FUN_00704680` | candidate -- `[ECX*0x4 + 0xCA0FF0]` writes to a fixed writable global |
+| `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | candidate -- BG queue list, `[ECX + ESI*0x4]` |
+| `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | candidate -- forced reactions per faction, two writes per iteration |
+| `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | confirmed shape, `[EBX*0x8 + 0x0]` |
+| `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | candidate -- LFG state |
+| `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | candidate (same handler shared with 0x367/0x369) |
+| `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | candidate (same handler) |
+| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | candidate -- guild bank items, `[ECX + EAX*0x4 + 0x18]` |
+| `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | confirmed -- `local_6` from `GetInt32` is loop bound, no cap, 40-byte struct writes to `&DAT_00C0F900 + (local_5*25 + iVar5) * 0x28` |
+| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | candidate -- guild rank permission table |
+| `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | candidate -- auction house pending sales list |
+
+Plus the 4 handlers at high-VA (`FUN_006d6d20`, `FUN_0080e1b0`,
+`FUN_006d0240`, `FUN_006d0460` etc.) which the audit flagged with
+score >= 5 but have **no static handler-address references** in
+the binary -- these are either dead code, runtime-built vtables,
+or non-packet-reachable (init code, asset loaders).
+
+### Mitigation strategy options
+
+For per-site patches the byte cost grows linearly. With **11
+confirmed packet-reachable candidates** the per-site approach is
+fragile (every patch needs its own pre-byte verification + a
+loop-comparison cap byte). A **universal mitigation** is now
+clearly the right approach:
+
+- Patch `CDataStore::GetUInt8`, `GetUInt16`, `GetUInt32`,
+  `GetUInt64`, `GetFloat`, `GetBytes` (all 6 primitives at
+  `0x0047B340-0x0047B480`) with a JMP-rel32 trampoline that
+  range-checks the destination pointer. If it lies in writable
+  globals (`0x00800000-0x00E00000`), abort the read instead of
+  writing.
+- Cost: ~15-20 bytes of inserted code per primitive (6 trampolines).
+- Risk: legit callers that DO write to globals (per-game state
+  arrays, cached UI state, achievement bitfields) break.
+  **Need full caller-classification first** (currently 284 callers
+  for GetUInt64 alone -- some are arbitrary-write candidates,
+  most are legit `lea reg, [ebp - X]` stack-local writes).
+
+The **safer-by-narrower** universal patch:
+
+- Range-check destination only when called from a handler that
+  recently called `GetUInt32` and stored the result somewhere
+  used as a loop bound. Too contextual for a static patch.
+
+Best practical path likely a **hybrid**:
+1. Per-site patches for the 11 confirmed-packet-reachable
+   handlers (Patch 4 through Patch 14, one per opcode), each
+   capping the loop count at the AC-side documented maximum
+   (AC's `MAX_GUILD_BANK_TAB_LOG_EVENTS = 25` etc).
+2. A "soft" universal trampoline on the 6 CDataStore primitives
+   that LOGS attempted writes to writable globals (observation
+   only -- runtime DLL responsibility), so we discover which
+   future opcodes need similar caps.
+
+Status: per-site patches **OPEN**; soft observation **OPEN**.
 
 ### Mitigation strategy options
 

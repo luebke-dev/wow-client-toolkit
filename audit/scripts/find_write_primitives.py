@@ -55,20 +55,21 @@ def addr(va):
 # canonical writeup-named one (CDataStore::GetInt64 @ 0x0047B400)
 # and then look for sister functions (GetInt32, GetFloat, GetBytes)
 # at small offsets from the same vtable / module section.
-# Functions that write through a pointer argument. We start with
-# CDataStore::GetInt64 (writeup-named) and add GetInt32/GetFloat
-# (sister methods on CDataStore that follow the exact same shape:
-# `Get(this, dst*)` reads sizeof(T) bytes from this->buffer and
-# writes them to *dst). All three are write primitives if `dst`
-# is attacker-controllable.
-#
-# The other CDataStore::GetXxx entry points are at small offsets
-# from GetInt64 by linker layout. We resolve them by scanning the
-# nearby code blocks below if symbol resolution fails.
+# All CDataStore::Get* write primitives in Wow.exe build 12340.
+# Discovered by enumerating function prologues in [0x0047B000-
+# 0x0047C000] and matching the canonical pattern:
+#   55 8B EC 56 8B F1 8B 46 14 6A <SIZE> 50 E8 ?? ?? ?? ??
+#                              ^^^^^^^^^^^^ pushes the byte-count
+# Each function reads `<SIZE>` bytes from `this->buffer` and writes
+# them to `*arg`. All are write primitives if `arg` is attacker-
+# controlled.
 SEED = [
-    ("CDataStore::GetInt64", "0x0047B400"),
-    ("CDataStore::GetInt32", "0x0047B450"),
-    ("CDataStore::GetFloat", "0x0047B330"),
+    ("CDataStore::GetUInt8",  "0x0047B340"),  # `push 1`
+    ("CDataStore::GetUInt16", "0x0047B380"),  # `push 2`
+    ("CDataStore::GetUInt32", "0x0047B3C0"),  # `push 4`  (or signed Int32)
+    ("CDataStore::GetUInt64", "0x0047B400"),  # `push 8`  -- writeup-named
+    ("CDataStore::GetFloat",  "0x0047B440"),  # `push 4`  (4-byte alt)
+    ("CDataStore::GetBytes",  "0x0047B480"),  # variable-length; arg is dst, size from packet
 ]
 
 out("# Wow.exe write-primitive RCE audit")

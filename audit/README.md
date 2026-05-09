@@ -9,9 +9,13 @@ private servers historically ship modified copies).
 
 ## Contents
 
-| File | Purpose |
-|---|---|
-| `scripts/audit_rce.py` | Ghidra Jython script. Walks the loaded Wow.exe, lists every `VirtualAlloc` / `VirtualProtect` / `LoadLibrary` / `CreateProcessA` / `ShellExecuteA` call site, dumps the manual-PE-loader (`FUN_00872350`) decompile, and writes a markdown report to `audit/out/`. |
+| Script | Purpose | Output |
+|---|---|---|
+| `scripts/audit_rce.py` | Ghidra Jython script. Walks the loaded Wow.exe, lists every `VirtualAlloc` / `VirtualProtect` / `LoadLibrary` / `CreateProcessA` / `ShellExecuteA` call site, dumps the manual-PE-loader (`FUN_00872350`) decompile. Used to derive the Patch 2 byte plan and to spot any new dangerous APIs Wow.exe imports. | `out/audit.md` |
+| `scripts/find_write_primitives.py` | Enumerates every caller of the `CDataStore::Get*` write primitives (GetUInt8/16/32/64, GetFloat, GetBytes -- 6 functions in 0x0047B340-0x0047B480) and scores each call site for the BG-positions vuln shape (scaled-index LEA destination + enclosing loop + global loop bound). Used to surface sister write-primitive RCE candidates that need the same loop-cap mitigation as Patch 3. | `out/write_primitives.md` |
+| `scripts/identify_handler.py` | Given a `HANDLER_VA` env var, walks back from a function to find direct callers + data references + dispatch-table neighbors. Used to prove a flagged handler IS reachable from a network packet (vs being dead code). Combine with a binary search for the handler's literal address bytes to find the registration call site (`push handler; push opcode; call`). | `out/handler_identity.md` |
+| `scripts/find_warden_targets.py` | Locates `FrameScript::Execute`, `push 0x041F` (CMSG_UNUSED5 -- C2 channel candidate), and the Win32 IAT entries we'd hook in the runtime DLL for behavioral tracing of server-pushed shellcode. | `out/warden_targets.md` |
+| `scripts/find_pe_loaders.py` | Sweeps the binary for every `cmp word [reg], 0x5A4D` (MZ-magic check) encoding and scores each owning function by `VirtualAlloc` / `VirtualProtect` / section-walk presence. Used to confirm `FUN_00872350` is the only manual PE loader (no sister loaders to bypass Patch 2). | `out/pe_loaders.md` |
 
 ## Running
 
@@ -21,6 +25,7 @@ Requires `podman` or `docker`, plus a copy of the canonical Wow.exe.
 mkdir -p project out input
 cp /path/to/Wow.exe input/Wow.exe
 
+# First time -- import the binary + run any postScript:
 podman run --rm \
   --entrypoint /ghidra/support/analyzeHeadless \
   -v "$PWD/project":/project \
@@ -32,12 +37,31 @@ podman run --rm \
   -import /input/Wow.exe \
   -scriptPath /scripts \
   -postScript audit_rce.py
+
+# Subsequent runs (project already imported -- add -process + -noanalysis):
+podman run --rm \
+  --entrypoint /ghidra/support/analyzeHeadless \
+  -v "$PWD/project":/project \
+  -v "$PWD/scripts":/scripts \
+  -v "$PWD/out":/out \
+  -v "$PWD/input":/input:ro \
+  docker.io/blacktop/ghidra:latest \
+  /project WoW \
+  -process Wow.exe -noanalysis \
+  -scriptPath /scripts \
+  -postScript find_write_primitives.py
 ```
 
-First run: ~4 minutes (Ghidra auto-analysis pass).
-Subsequent runs: add `-process Wow.exe -noanalysis` → seconds.
+First import: ~4 minutes (Ghidra auto-analysis pass). Re-runs:
+seconds. Pass `-e HANDLER_VA=0x005A4800` etc. to override the
+default for `identify_handler.py`.
 
-Output lands in `out/audit.md`.
+Output files end up owned by root (the Ghidra container runs as
+root). Fix permissions with:
+
+```sh
+podman run --rm -v "$PWD/out":/out alpine chmod a+r /out/*.md
+```
 
 ## Re-deriving offsets
 
