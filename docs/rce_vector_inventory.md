@@ -98,7 +98,7 @@ unconstrained.
 | `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | candidate (same handler shared with 0x367/0x369) |
 | `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | candidate (same handler) |
 | `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | candidate -- guild bank items, `[ECX + EAX*0x4 + 0x18]` |
-| `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | confirmed -- `local_6` from `GetInt32` is loop bound, no cap, 40-byte struct writes to `&DAT_00C0F900 + (local_5*25 + iVar5) * 0x28` |
+| `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | confirmed but **byte-bounded**: both `local_5` (tab id) and `local_6` (loop count) are read via `GetUInt8` (max 255 each). Inner write goes to `&DAT_00C0F900 + (local_5*25 + iVar5) * 0x28` so destination fits in a ~260 KiB window above base. Still exploitable (overwrite any global in that window) but NOT the unbounded-uint32 shape of BG-positions. |
 | `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | candidate -- guild rank permission table |
 | `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | candidate -- auction house pending sales list |
 

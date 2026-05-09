@@ -32,8 +32,6 @@
 #![cfg(windows)]
 
 use core::arch::naked_asm;
-use std::ffi::CStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
@@ -88,19 +86,19 @@ pub fn install_all() {
     install_one(
         "kernel32.dll",
         "CreateFileA",
-        hook_create_file_a as usize,
+        hook_create_file_a as *const () as usize,
         &raw mut TRAMP_CREATE_FILE_A,
     );
     install_one(
         "wininet.dll",
         "InternetOpenA",
-        hook_internet_open_a as usize,
+        hook_internet_open_a as *const () as usize,
         &raw mut TRAMP_INTERNET_OPEN_A,
     );
     install_one(
         "wininet.dll",
         "HttpSendRequestA",
-        hook_http_send_request_a as usize,
+        hook_http_send_request_a as *const () as usize,
         &raw mut TRAMP_HTTP_SEND_REQUEST_A,
     );
 }
@@ -293,6 +291,3 @@ extern "C" fn hook_http_send_request_a() {
     );
 }
 
-// Suppress unused-import warning for CStr (kept for future use).
-#[allow(dead_code)]
-type _CStrUnused = CStr;
