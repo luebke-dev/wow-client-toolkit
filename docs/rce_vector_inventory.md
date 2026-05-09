@@ -117,8 +117,9 @@ Manual byte-level inspection has classified each candidate:
 | `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
 
 **Updated conclusion** (after byte-level scan + Ghidra decompile
-of all 13 score-7 candidates AND all 33 score-4 [REVIEW]
-candidates):
+of all 13 score-7 + all 33 score-4 + 23 lower-ranked +
+12 indirectly-reachable + 14 unreached candidates -- 95 distinct
+functions audited total):
 
 | Severity | Count | Opcodes |
 |---|---|---|
@@ -168,6 +169,42 @@ pending realloc-failure-mode confirmation). Minimal additions:
     Patches 1-5 use.
 - **Patch 7+8** (RAID_INSTANCE_INFO, EXPECTED_SPAM_RECORDS):
   cap loop counts to AC documented maxima.
+
+### Lower-ranked + tier-2-recursive audit (added 2026-05-09)
+
+Extended the audit to dump ALL caller sites (not just top-30 per
+primitive) and ran a recursive caller-trace on every "unreached"
+function. This surfaced 35 ADDITIONAL packet-reachable handlers:
+
+- **23 newly-direct handlers** registered via the standard
+  push-handler pattern but ranked outside top-30 in the original
+  per-primitive caller listing (auctions x4, achievements x2,
+  raid-ready-check x2, spell-related x4, guild events, criteria,
+  pet-guids, etc.)
+- **12 indirectly-reachable** functions called from a registered
+  packet handler within depth 1-2 (e.g. quest-list helpers,
+  loot-response sub-handlers).
+
+Decompile + pattern-scan of all 35 reveals that **none of them
+match the BG-positions arbitrary-write shape**. The patterns are:
+
+| Shape | Count | Examples |
+|---|---|---|
+| Heap-vec realloc + bounds-checked write | ~15 | All auction handlers (`SMSG_AUCTION_LIST_RESULT` etc.), `SMSG_PET_GUIDS`, `SMSG_QUERY_QUESTS_COMPLETED_RESPONSE` |
+| Sanitized-index (channel name lookup) | ~5 | `0x09B`, USERLIST handlers |
+| Value-validated dispatch (==0/1/2 then per-branch logic) | ~5 | `SMSG_START_MIRROR_TIMER`, `MSG_RAID_READY_CHECK*` |
+| No danger pattern at all | ~10 | Spell update handlers, calendar, achievement |
+
+Even the highest-priority new candidate (`FUN_00503990` reached
+indirectly via channel-list-clear, both fixed-base AND
+fixed-array-index flagged) turned out to be heap-vec with
+sanitized channel-id from name lookup -- DoS-only.
+
+**Conclusion stays stable**: only the 4 already-identified
+functions have arbitrary-write shape. Patches 1+2+3+4+5 close
+all the unbounded ones; Patch 6 (deferred) covers the
+OOB-pointer outlier. **The audit's RCE-class coverage is now
+saturated for the CDataStore primitive family.**
 
 **Practical implication for the runtime DLL:** the IAT-detour
 hooks on `CreateFileA` / `InternetOpenA` / `HttpSendRequestA`

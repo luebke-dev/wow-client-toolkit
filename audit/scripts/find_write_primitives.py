@@ -236,14 +236,25 @@ for name, va_hex, fn in PRIMITIVES:
         out("- (no callers found)")
         out("")
         continue
-    out("Total callers: {0}. Top 30 by danger score:".format(len(rows)))
+    out("Total callers: {0}. Listing every site with score >= 2:".format(
+        len(rows)))
     out("")
-    for sc, call_addr, owner, notes in rows[:30]:
-        marker = "DANGER" if sc >= 5 else ("REVIEW" if sc >= 3 else "ok")
+    score2_count = 0
+    for sc, call_addr, owner, notes in rows:
+        if sc < 2:
+            continue
+        marker = ("DANGER" if sc >= 5 else
+                  "REVIEW" if sc >= 3 else "ok")
         out("- score=**{0}** [{1}] call @ {2} in `{3}` @ {4}".format(
             sc, marker, call_addr, owner.getName(), owner.getEntryPoint()))
         for n in notes:
             out("    - {0}".format(n))
+        if sc == 2:
+            score2_count += 1
+    out("")
+    out("({0} score-2 sites listed for completeness; bulk of these "
+        "are heap-vec realloc patterns that fail safely on huge counts.)".format(
+            score2_count))
     out("")
 
 # ---- 4. Decompile each DANGER caller ---------------------------------
