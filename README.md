@@ -147,19 +147,25 @@ cargo build --release -p wow-exe-patcher
     --output /path/to/Wow_safe.exe
 ```
 
-Default mode applies all three RCE-hardening patches with strict
-pre-byte verification and recomputes the PE checksum. The patcher
-refuses to write anything if the input doesn't match the canonical
-12340 build.
+Default mode applies all 5 RCE-hardening patches (8 SecurityPatch
+entries since Patch 4 has 4 byte-edits in the same function) with
+strict pre-byte verification and recomputes the PE checksum. The
+patcher refuses to write anything if the input doesn't match the
+canonical 12340 build.
 
 Verify:
 
 ```sh
 ./target/release/wow-exe-patcher verify --input /path/to/Wow_safe.exe
-# [OK]   rce.zdata-no-execute @ 0x2a7: applied
-# [OK]   rce.warden-loader-no-execute @ 0x4719d4: applied
-# [OK]   rce.bg-positions-loop-cap @ 0x14a842: applied
-# [OK] all three RCE-hardening patches applied
+# [OK] rce.zdata-no-execute @ 0x2a7: applied
+# [OK] rce.warden-loader-no-execute @ 0x4719d4: applied
+# [OK] rce.bg-positions-loop-cap @ 0x14a842: applied
+# [OK] rce.guild-permissions-arith-1 @ 0x1cae34: applied
+# [OK] rce.guild-permissions-arith-2 @ 0x1cae4f: applied
+# [OK] rce.guild-permissions-arith-3 @ 0x1cae8a: applied
+# [OK] rce.guild-permissions-arith-4 @ 0x1caea8: applied
+# [OK] rce.guild-roster-motd-loop-cap @ 0x1cbb15: applied
+# [OK] all 8 RCE-hardening patches applied
 ```
 
 ### 2. (Optional) Add the runtime detector for forensic logging
@@ -194,16 +200,36 @@ WINEPREFIX=~/.wine wine wow-rce-watcher.exe drive_c/wow/Wow_safe.exe
 
 The launcher spawns Wow.exe with `CREATE_SUSPENDED`, injects the
 DLL via `CreateRemoteThread + LoadLibraryW`, then resumes the main
-thread. The DLL hooks `FUN_00872350` (the Warden module loader) at
-`0x00872350` and `.zdata` lockdown via `VirtualProtect`.
+thread. The DLL installs four classes of hook on `DLL_PROCESS_ATTACH`:
+
+1. **Manual Warden PE loader** (`FUN_00872350`). Per-module
+   Yes/No prompt for non-canonical modules; canonical Blizzard
+   modules pass silently. Module bytes are dumped to
+   `%APPDATA%\wow-rce-watcher\modules\<md5>.bin` for offline
+   forensics.
+2. **MSG_BATTLEGROUND_PLAYER_POSITIONS handler** (`FUN_0054B3F0`).
+   Observation only -- logs every iteration count seen on the
+   wire. Patch 3 is the safety net.
+3. **Win32 API detour hooks** (`kernel32!CreateFileA`,
+   `wininet!InternetOpenA`, `wininet!HttpSendRequestA`). Catch
+   both Wow's IAT-routed calls AND server-shellcode-pushed
+   calls via `GetProcAddress`. Used for browser-history exfil
+   detection.
+4. **PE-buffer dump-to-disk**. Every PE-shaped buffer the loader
+   sees is hashed + persisted. Idempotent (same MD5 = same file).
 
 Audit log at `%APPDATA%\wow-rce-watcher\events.jsonl`:
 
 ```jsonl
 {"ts":1714312345,"kind":"hook_installed","target":"0x00872350"}
-{"ts":1714312345,"kind":"zdata_locked","addr":"0x00dd1000","old_protection":"0x40","note":"EXECUTE bit cleared on .zdata; Vektor-1 RCE blocked"}
+{"ts":1714312345,"kind":"bg_hook_installed","addr":"0x0054b406","note":"..."}
+{"ts":1714312345,"kind":"api_hook_installed","dll":"kernel32.dll","fn":"CreateFileA","addr":"0x..."}
 {"ts":1714312399,"kind":"warden_module","action":"allow","md5":"79c0768d657977d697e10bad956cced1","reason":"matches canonical Blizzard 3.3.5a Win module","imports":"...","sections":"..."}
-{"ts":1714312410,"kind":"warden_module","action":"block","md5":"deadbeef...","reason":"weaponised import detected: kernel32.dll!CreateProcessA","imports":"...","sections":"..."}
+{"ts":1714312410,"kind":"module_dumped","md5":"deadbeef...","size":"45056","note":"raw PE bytes -> %APPDATA%\\wow-rce-watcher\\modules\\deadbeef....bin"}
+{"ts":1714312410,"kind":"non_canonical_warden","md5":"deadbeef...","verdict":"weaponised import detected: kernel32.dll!CreateProcessA","imports_first_16":"...","sections_first_8":"...","note":"MODULE NOT MATCHING CANONICAL BLIZZARD MD5..."}
+{"ts":1714312420,"kind":"module_blocked","md5":"deadbeef...","verdict":"...","note":"user rejected the non-canonical Warden module; loader returned 0"}
+{"ts":1714312500,"kind":"api_call","api":"CreateFileA","path":"C:\\Users\\X\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History"}
+{"ts":1714312600,"kind":"bg_handler_called","count":"40","note":"legit BG-positions packet, count=40"}
 ```
 
 ---
@@ -220,7 +246,7 @@ wow-exe-patcher probe  --input <Wow.exe>
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--rce-hardening` | `true` | Apply all three RCE-hardening patches. Strict pre-byte verified. Pass `--rce-hardening=false` only when you specifically need a vulnerable copy (research). |
+| `--rce-hardening` | `true` | Apply all 5 RCE-hardening patches (8 SecurityPatch entries: zdata + warden-loader + bg-positions-loop-cap + 4 guild-permissions-arith + guild-roster-motd-cap). Strict pre-byte verified. Pass `--rce-hardening=false` only when you specifically need a vulnerable copy (research). |
 | `--version <STRING>` | none | Replace `3.3.5` in `.rdata` with the given string (must fit in the existing slot + trailing NULs). |
 | `--build <N>` | none | Replace all occurrences of build number `12340` with `<N>`. |
 | `--unlock-signatures` / `--allow-custom-gluexml` | off | Apply the tswow `allow-custom-gluexml` table (TOC.SIG bypass for custom AddOn signatures). |
@@ -233,7 +259,7 @@ wow-exe-patcher probe  --input <Wow.exe>
 
 ### `verify` exit codes
 
-- `0` — all three RCE-hardening patches applied
+- `0` — all 8 RCE-hardening SecurityPatch entries applied (= the 5 logical patches)
 - `1` — at least one missing or unrecognised pre-bytes
 
 ### `probe`
@@ -264,7 +290,7 @@ assert!(report.all_applied);
 
 ---
 
-## Runtime detector — design
+## Runtime DLL — design
 
 ```
 wow-rce-watcher.exe (launcher)
@@ -276,21 +302,40 @@ wow-rce-watcher.exe (launcher)
 wow_rce_watcher.dll (in Wow.exe address space)
   └── DllMain DLL_PROCESS_ATTACH
         └── side thread:
-              ├── install_jmp_hook(0x00872350, hook_entry)
-              └── VirtualProtect(.zdata, RW)   ← Vektor-1 mitigation
+              ├── install_jmp_hook(0x00872350, warden_loader_hook)
+              ├── bg_handler::install()         (FUN_0054B3F0 observation)
+              └── api_hooks::install_all()
+                    ├── kernel32!CreateFileA      detour
+                    ├── wininet!InternetOpenA     detour
+                    └── wininet!HttpSendRequestA  detour
 
 at runtime, every call to FUN_00872350 triggers:
-  └── hook_entry (naked-asm, preserves ECX + EFLAGS)
+  └── warden_loader_hook (naked-asm, preserves ECX + EFLAGS)
+        ├── dump_module_bytes -> %APPDATA%\wow-rce-watcher\modules\<md5>.bin
         ├── pe::parse(module_buffer)
         ├── decision::evaluate(parsed)
-        │     ├── MD5 == known Blizzard 79c0768d?  -> Allow
-        │     ├── weaponised import (CreateProcess, ShellExecute, ...)?  -> Block
-        │     ├── RWX section?                       -> Block
-        │     ├── multiple .text sections?           -> Block
-        │     └── unknown but clean                  -> Allow + audit log
-        ├── log::write_event(verdict)  -> events.jsonl
-        └── if Allow: tail-jmp through trampoline (original prologue + JMP back)
+        │     ├── MD5 == canonical Blizzard 79c0768d?  -> Allow (silent)
+        │     └── otherwise                            -> verdict for log
+        ├── log::write_event(module_seen)             -> events.jsonl
+        ├── if non-canonical:
+        │     ├── log::write_event(non_canonical_warden)
+        │     ├── prompt_user_allow_non_canonical (synchronous MessageBox)
+        │     │     ├── Yes -> log module_user_allowed, return 1
+        │     │     └── No  -> log module_blocked,      return 0
+        │     └── (dialog failed -> fail safe = reject)
+        └── if Allow: tail-jmp through trampoline
             if Block: return 0 (caller handles "module load failed")
+
+at runtime, every BG-positions packet triggers:
+  └── bg_hook_entry (naked-asm)
+        └── log::write_event(bg_handler_called)  -> events.jsonl
+        (observation only -- Patch 3 is the actual cap)
+
+at runtime, every CreateFileA / InternetOpenA / HttpSendRequestA call:
+  └── observe_<api> (naked-asm + Rust callback)
+        └── log::write_event(api_call)           -> events.jsonl
+        (catches both Wow's own IAT calls AND server-shellcode calls
+         resolved via GetProcAddress)
 ```
 
 Key design notes:
@@ -306,6 +351,18 @@ Key design notes:
   5-byte prologue (`55 8B EC 6A FF` = push ebp; mov ebp, esp;
   push -1) plus a JMP-rel32 back to `0x00872355`, so the original
   function continues normally on the "allow" path.
+- **Per-module gate, not silent block**: the previous-generation
+  iteration of this DLL silently blocked anything that looked
+  weaponized. Current behavior is to PROMPT — the user sees the
+  module's MD5 + imports + sections + verdict and decides per
+  module. Default-button is No; failed-to-display dialog =
+  reject. Canonical Blizzard MD5 is silently allowed.
+- **API detours over IAT hooks**: Wow's IAT only catches calls
+  Wow makes. A server-pushed Warden module that resolves API
+  addresses via `GetProcAddress` bypasses the IAT entirely. The
+  detour rewrites the API entry point's first 5 bytes with a JMP
+  to our observer + trampoline back, so every caller (Wow OR
+  shellcode) goes through us.
 - **No WASI**: pure cdylib; only Win32 imports. Loads identically
   on native Windows and Wine ≥ 8.0.
 - **Audit-friendly**: hand-rolled minimal PE parser (~200 lines),
@@ -316,15 +373,17 @@ Key design notes:
 
 ## Audit / Ghidra walkthrough
 
-`audit/scripts/audit_rce.py` is a Ghidra Jython script that walks a
-Wow.exe and lists every `VirtualAlloc` / `VirtualProtect` /
-`LoadLibrary` call site, suspicious imports, and the manual-PE-loader
-decompile. Used to derive and validate the patch byte plan.
+The `audit/` directory contains 9 Ghidra Jython scripts that
+re-derive every patch byte plan + every vuln-shape classification
+from the binary. Together they back the audit conclusion that
+only 4 functions in `Wow.exe` exhibit the unbounded
+arbitrary-write shape (3 patched, 1 deferred). See
+`audit/README.md` for the per-script table and the full
+`docker.io/blacktop/ghidra:latest` invocation recipe.
+
+Quick example (assumes `audit/input/Wow.exe` is in place):
 
 ```sh
-mkdir -p audit/{project,out,input}
-cp /path/to/Wow.exe audit/input/Wow.exe
-
 podman run --rm \
   --entrypoint /ghidra/support/analyzeHeadless \
   -v "$PWD/audit/project":/project \
@@ -338,8 +397,15 @@ podman run --rm \
   -postScript audit_rce.py
 ```
 
-First run takes ~4 minutes (Ghidra auto-analysis); subsequent runs
-with `-process Wow.exe -noanalysis` are seconds.
+First run takes ~4 minutes (Ghidra auto-analysis); subsequent
+runs with `-process Wow.exe -noanalysis` are seconds. Outputs
+land under `audit/out/`. The Ghidra container runs as root, so
+fix permissions with
+`podman run --rm -v "$PWD/audit/out":/out alpine chmod a+r /out/*.md`.
+
+Full vuln classification + per-handler decompile lives in
+`docs/rce_vector_inventory.md`. End-to-end engineering report
+with executive summary is `docs/FINAL_REPORT.md`.
 
 ---
 
@@ -370,9 +436,24 @@ re-derive offsets manually using the audit scripts.
 - **brian8544** — proof-of-concept 1.0 + module
 - **tswow** — the `ClientPatches.ts` byte tables for the named feature toggles
 
-The third patch (BG-positions loop cap) and the closed-loop
-analysis showing why Patches 1+2 alone are bypassable are
-contributions of this project.
+Original contributions of this project (vs the prior public
+state of the art):
+
+- **Patch 3** (BG-positions loop cap) and the closed-loop
+  analysis showing why Patches 1+2 alone are bypassable.
+- **Patch 4 + Patch 5** (sister BG-positions vulns in
+  `MSG_GUILD_PERMISSIONS` and `SMSG_GUILD_ROSTER`), discovered
+  by the audit script suite and not covered by any prior
+  published patcher.
+- **Per-module Yes/No prompt** for non-canonical Warden modules
+  in the runtime DLL (instead of either silent observation OR
+  blanket blocking).
+- **Module-bytes-dump-to-disk** + **Win32 API detour hooks**
+  (CreateFileA / InternetOpenA / HttpSendRequestA) for offline
+  forensics of server-pushed payloads.
+- **Reproducible Ghidra audit pipeline** (9 scripts) so the
+  conclusion "only these 4 functions are exploitable" can be
+  re-derived against any custom Wow.exe build.
 
 ---
 
