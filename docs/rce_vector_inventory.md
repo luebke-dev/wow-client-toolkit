@@ -82,25 +82,52 @@ GetBytes -- all the CDataStore::Get* family) plus a binary
 search for each candidate handler's literal-address byte sequence
 followed by `push handler; push opcode; call RegisterHandler`
 identifies the following packet-reachable handlers with the same
-shape as the BG-positions vuln. Each is a candidate RCE primitive
-pending decompile-level confirmation that the loop bound is
-unconstrained.
+audit-shape (scaled-index LEA + loop + global-read) as the
+BG-positions vuln.
 
-| Opcode | AC name | Handler | Status |
+**Important caveat:** the audit-shape match does NOT mean each
+handler is the same severity as BG-positions. To match
+BG-positions' "arbitrary write" capability all three of the
+following must hold:
+
+1. Loop bound is read via `GetUInt32` (4 bytes, max 4 billion).
+   Byte/word bounds limit total iterations.
+2. Destination is a **fixed writable-globals base** with the
+   counter as offset (`[base_imm + counter*N]`), NOT a heap or
+   stack allocation that grows with the count.
+3. No pre-loop realloc / capacity check that would either fail
+   safely on huge counts or pre-allocate enough room.
+
+Manual byte-level inspection has classified each candidate:
+
+| Opcode | AC name | Handler | Severity |
 |---|---|---|---|
-| `0x121` | `SMSG_TRADE_STATUS_EXTENDED` | `FUN_00704680` | candidate -- `[ECX*0x4 + 0xCA0FF0]` writes to a fixed writable global |
-| `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | candidate -- BG queue list, `[ECX + ESI*0x4]` |
-| `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | candidate -- forced reactions per faction, two writes per iteration |
-| `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | confirmed shape, `[EBX*0x8 + 0x0]` |
-| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | candidate -- arena team member list |
-| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | candidate -- arena team stats list |
-| `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | candidate -- LFG state |
-| `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | candidate (same handler shared with 0x367/0x369) |
-| `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | candidate (same handler) |
-| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | candidate -- guild bank items, `[ECX + EAX*0x4 + 0x18]` |
-| `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | confirmed but **byte-bounded**: both `local_5` (tab id) and `local_6` (loop count) are read via `GetUInt8` (max 255 each). Inner write goes to `&DAT_00C0F900 + (local_5*25 + iVar5) * 0x28` so destination fits in a ~260 KiB window above base. Still exploitable (overwrite any global in that window) but NOT the unbounded-uint32 shape of BG-positions. |
-| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | candidate -- guild rank permission table |
-| `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | candidate -- auction house pending sales list |
+| `0x121` | `SMSG_TRADE_STATUS_EXTENDED` | `FUN_00704680` | **bounded**: LEA `[ECX*4 + 0xCA0FF0]` IS a fixed-base write but `ECX` is the zero-extended `local_1` from `GetUInt8` -- only 4 bytes per call * 256 = 1 KiB destination window. Per-call write but small radius. |
+| `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | **needs decompile**: LEA `[ECX + ESI*4]` -- ECX could be heap base or fixed global; ESI is loop counter. Pending classification. |
+| `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | **DoS-only**: destination `[edx + esi*8]` where `edx = [0x00C23494]` is a heap-pointer load. Function does pre-loop realloc to grow the vec; with `count=2^32` malloc of 32 GiB fails -> safe failure path. No arbitrary write. |
+| `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | **DoS-only**: destination `[eax + esi*8]` where `eax` is from `_alloca(count*8)` -- stack allocation. Huge count -> stack-overflow crash, no controlled write. |
+| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | needs decompile |
+| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | needs decompile |
+| `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | needs decompile |
+| `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | needs decompile (same handler shared with 0x367/0x369) |
+| `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | needs decompile |
+| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | needs decompile |
+| `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | **bounded**: `local_5` (tab id) and `local_6` (loop count) both `GetUInt8` (max 255). Destination range = `&DAT_00C0F900 .. +260 KiB`. Exploitable for overwriting a global in that window but NOT the unbounded-uint32 shape of BG-positions. |
+| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | needs decompile |
+| `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | needs decompile |
+
+**Provisional conclusion:** so far no other handler matches the
+exact unbounded-uint32 + fixed-base + no-realloc combination of
+the BG-positions vuln. Three handlers are confirmed DoS-only or
+bounded; eight need byte-level decompile classification; the
+remaining audit candidates without static address references are
+not packet-reachable.
+
+The BG-positions vuln may be uniquely virulent because of the
+inline `dword_BEA5B0` global-counter design (no heap, no stack).
+Other server-driven list responses use heap-grown vectors which
+fail safely on huge counts. Confirming this requires finishing
+the per-handler classification.
 
 Plus the 4 handlers at high-VA (`FUN_006d6d20`, `FUN_0080e1b0`,
 `FUN_006d0240`, `FUN_006d0460` etc.) which the audit flagged with
