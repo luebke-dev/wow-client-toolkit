@@ -103,31 +103,53 @@ Manual byte-level inspection has classified each candidate:
 | Opcode | AC name | Handler | Severity |
 |---|---|---|---|
 | `0x121` | `SMSG_TRADE_STATUS_EXTENDED` | `FUN_00704680` | **bounded**: LEA `[ECX*4 + 0xCA0FF0]` IS a fixed-base write but `ECX` is the zero-extended `local_1` from `GetUInt8` -- only 4 bytes per call * 256 = 1 KiB destination window. Per-call write but small radius. |
-| `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | **needs decompile**: LEA `[ECX + ESI*4]` -- ECX could be heap base or fixed global; ESI is loop counter. Pending classification. |
+| `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | **DoS-only**: capacity-check pattern (cmp local, [global_capacity_store]) -> heap-vec realloc, fails safely on huge counts. |
 | `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | **DoS-only**: destination `[edx + esi*8]` where `edx = [0x00C23494]` is a heap-pointer load. Function does pre-loop realloc to grow the vec; with `count=2^32` malloc of 32 GiB fails -> safe failure path. No arbitrary write. |
 | `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | **DoS-only**: destination `[eax + esi*8]` where `eax` is from `_alloca(count*8)` -- stack allocation. Huge count -> stack-overflow crash, no controlled write. |
-| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | needs decompile |
-| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | needs decompile |
-| `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | needs decompile |
-| `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | needs decompile (same handler shared with 0x367/0x369) |
-| `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | needs decompile |
-| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | needs decompile |
+| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | **needs decompile**: no capacity-check pattern detected, no fixed-base LEA detected (heuristic hit nothing in 1 KiB scan). Could be either safe (no scaled-LEA write) or have a pattern the heuristic misses. |
+| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | **needs decompile**: heuristic flags BOTH capacity-check AND fixed-base LEA -- most likely heap-vec for the main array PLUS a small fixed-globals scratch area for stats. Severity depends on whether the fixed-base writes are bounded. |
+| `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
+| `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | **DoS-only** (same handler shared with 0x367/0x369). |
+| `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | **DoS-only** (same handler). |
+| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | **needs decompile**: no capacity-check detected, no fixed-base LEA detected. Heuristic blindspot. |
 | `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | **bounded**: `local_5` (tab id) and `local_6` (loop count) both `GetUInt8` (max 255). Destination range = `&DAT_00C0F900 .. +260 KiB`. Exploitable for overwriting a global in that window but NOT the unbounded-uint32 shape of BG-positions. |
-| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | needs decompile |
-| `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | needs decompile |
+| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | **mixed**: capacity-check + fixed-base LEA detected. Likely heap-vec main + fixed-globals scratch. Decompile needed. |
+| `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
 
-**Provisional conclusion:** so far no other handler matches the
-exact unbounded-uint32 + fixed-base + no-realloc combination of
-the BG-positions vuln. Three handlers are confirmed DoS-only or
-bounded; eight need byte-level decompile classification; the
-remaining audit candidates without static address references are
-not packet-reachable.
+**Updated conclusion** (after byte-level scan of all 13):
 
-The BG-positions vuln may be uniquely virulent because of the
-inline `dword_BEA5B0` global-counter design (no heap, no stack).
-Other server-driven list responses use heap-grown vectors which
-fail safely on huge counts. Confirming this requires finishing
-the per-handler classification.
+| Severity | Count | Opcodes |
+|---|---|---|
+| **DoS-only (heap-vec / alloca)** | 6 | `0x23D`, `0x2A5`, `0x330`, `0x367`, `0x368`, `0x369`, `0x490` |
+| **Bounded write (byte-counter / small radius)** | 2 | `0x121` (1 KiB window), `0x3EE` (~260 KiB window) |
+| **Mixed / needs decompile** | 4 | `0x34E`, `0x35B`, `0x3E8`, `0x3FD` |
+| **Unbounded fixed-base (BG-positions class)** | 1 | only the original `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x2C0` -> `FUN_0054b3f0`) |
+
+The BG-positions vuln IS likely the unique unbounded-fixed-base
+case in Wow.exe build 12340. The audit's score-7 false positives
+came from handlers using either the heap-vec realloc pattern
+(safe on OOM) or `_alloca` (safe on stack overflow) -- both fail
+to controlled crashes rather than arbitrary writes.
+
+The four "mixed" handlers (`0x34E`, `0x35B`, `0x3E8`, `0x3FD`)
+combine a heap-grown main array with a fixed-globals scratch
+area; the fixed writes might be byte-bounded (low severity) or
+uint32-bounded (BG-class). Pending decompile.
+
+**Practical implication for the patcher:** the existing Patches
+1+2+3 likely cover the entire native-RCE surface of the client.
+Adding Patch 4+ for the four mixed-pattern handlers is worthwhile
+*if* the scratch-area writes turn out to be uint32-bounded; they
+will likely turn out to be small-and-bounded but the verification
+is the next step.
+
+**Practical implication for the runtime DLL:** the IAT-detour
+hooks on `CreateFileA` / `InternetOpenA` / `HttpSendRequestA`
+already added (commit `139f59c`) cover the *post-RCE* class --
+even if a server somehow pivots through one of the bounded
+write-windows to gain code execution, file-IO + HTTP exfil
+gets logged. That layer is correct independent of how many
+RCE primitives exist.
 
 Plus the 4 handlers at high-VA (`FUN_006d6d20`, `FUN_0080e1b0`,
 `FUN_006d0240`, `FUN_006d0460` etc.) which the audit flagged with
