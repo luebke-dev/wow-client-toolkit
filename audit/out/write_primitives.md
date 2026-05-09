@@ -9,6 +9,8 @@ MSG_BATTLEGROUND_PLAYER_POSITIONS arbitrary-write.
 ## 1. Write-primitive functions (seeded from CDataStore::GetInt64)
 
 - `CDataStore::GetInt64` @ `0x0047B400` (size 58 bytes)
+- `CDataStore::GetInt32` @ `0x0047B450` -- NOT defined as a function (run autoanalysis)
+- `CDataStore::GetFloat` @ `0x0047B330` -- NOT defined as a function (run autoanalysis)
 
 ## 2. Sister write-primitive candidates (same-prototype neighbors)
 
@@ -33,6 +35,31 @@ look. Score 0-2 = local-variable destination, safe.
 
 Total callers: 284. Top 30 by danger score:
 
+- score=**7** [DANGER] call @ 005a4900 in `FUN_005a4800` @ 005a4800
+    - scaled-index LEA: `[EAX + EAX*0x4]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c1dc10]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 006d6d8d in `FUN_006d6d20` @ 006d6d20
+    - scaled-index LEA: `[EDI*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00c79f98]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0080e231 in `FUN_0080e1b0` @ 0080e1b0
+    - scaled-index LEA: `[EDI*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**7** [DANGER] call @ 0080e2a4 in `FUN_0080e1b0` @ 0080e1b0
+    - scaled-index LEA: `[EDX + EDI*0x8]`
+    - function contains a backward conditional jump (loop)
+    - reads global (`dword ptr [0x00ad49e0]`) -- candidate loop bound
+- score=**5** [DANGER] call @ 0054b41c in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EDI*0x8 + 0xbea180]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 0054b490 in `FUN_0054b3f0` @ 0054b3f0
+    - scaled-index LEA: `[EAX*0x8 + 0xbea170]`
+    - function contains a backward conditional jump (loop)
+- score=**5** [DANGER] call @ 008004c6 in `FUN_00800470` @ 00800470
+    - scaled-index LEA: `[EBX*0x8 + 0x0]`
+    - function contains a backward conditional jump (loop)
 - score=**4** [REVIEW] call @ 00500393 in `FUN_00500380` @ 00500380
     - function contains a backward conditional jump (loop)
     - reads global (`dword ptr [0x00bcf094]`) -- candidate loop bound
@@ -102,26 +129,299 @@ Total callers: 284. Top 30 by danger score:
 - score=**4** [REVIEW] call @ 00571d3c in `FUN_00571c50` @ 00571c50
     - function contains a backward conditional jump (loop)
     - reads global (`dword ptr [0x00beb200]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0057450d in `FUN_005744f0` @ 005744f0
-    - function contains a backward conditional jump (loop)
-    - reads global (`dword ptr [0x00beb620]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 00574d5d in `FUN_00574d50` @ 00574d50
-    - function contains a backward conditional jump (loop)
-    - reads global (`dword ptr [0x00bd1968]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0059e332 in `FUN_0059e160` @ 0059e160
-    - function contains a backward conditional jump (loop)
-    - reads global (`[0x00c0f448]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0059e3aa in `FUN_0059e160` @ 0059e160
-    - function contains a backward conditional jump (loop)
-    - reads global (`[0x00c0f448]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0059e727 in `FUN_0059e480` @ 0059e480
-    - function contains a backward conditional jump (loop)
-    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0059e79e in `FUN_0059e480` @ 0059e480
-    - function contains a backward conditional jump (loop)
-    - reads global (`dword ptr [0x00c0f458]`) -- candidate loop bound
-- score=**4** [REVIEW] call @ 0059eea2 in `FUN_0059ecd0` @ 0059ecd0
-    - function contains a backward conditional jump (loop)
-    - reads global (`[0x00c0f468]`) -- candidate loop bound
 
 ## 4. Top-3 danger sites decompiled
+
+### `FUN_005a4800` @ 005a4800 -- score 7 -- call site 005a4900
+
+```c
+
+undefined4 FUN_005a4800(void)
+
+{
+  int iVar1;
+  bool bVar2;
+  bool bVar3;
+  __time32_t _Var4;
+  int iVar5;
+  int iVar6;
+  uint uVar7;
+  int local_c;
+  byte local_7;
+  byte local_6;
+  byte local_5;
+  
+  uVar7 = 0;
+  _Var4 = FID_conflict___time32((__time32_t *)0x0);
+  FUN_0047b340(&local_5);
+  FUN_0047b340(&local_6);
+  if ((DAT_00c1dc2c != 0) && (DAT_00acf8c8 < 7)) {
+    DAT_00c1dc2c = 0;
+    do {
+      iVar5 = (uint)DAT_00acf8c8 * 0x19 + uVar7;
+      FUN_0067a3a0(*(undefined4 *)(&DAT_00c0f908 + iVar5 * 0x28),
+                   *(undefined4 *)(&DAT_00c0f90c + iVar5 * 0x28),&LAB_005a47d0,0);
+      if (*(int *)(&DAT_00c0f910 + ((uint)DAT_00acf8c8 * 0x19 + uVar7) * 0x28) != 0) {
+        FUN_0067a0f0(*(int *)(&DAT_00c0f910 + ((uint)DAT_00acf8c8 * 0x19 + uVar7) * 0x28),
+                     &LAB_005a47d0,0);
+      }
+      uVar7 = uVar7 + 1;
+    } while (uVar7 < 0x19);
+  }
+  iVar5 = 0;
+  DAT_00acf8c8 = local_5;
+  if (local_6 != 0) {
+    do {
+      FUN_0047b340(&local_7);
+      iVar6 = ((uint)local_5 * 0x19 + iVar5) * 0x28;
+      *(uint *)(&DAT_00c0f900 + iVar6) = (uint)local_7;
+      FUN_0047b400(&DAT_00c0f908 + iVar6);
+      iVar1 = ((uint)local_5 * 0x19 + iVar5) * 0x28;
+      *(int *)(&DAT_00c0f920 + iVar1) = iVar5;
+      iVar6 = *(int *)(&DAT_00c0f900 + iVar1);
+      if ((((iVar6 == 4) || (iVar6 == 5)) || (iVar6 == 6)) || ((iVar6 == 8 || (iVar6 == 9)))) {
+        FUN_0047b3c0(&DAT_00c0f918 + iVar1);
+      }
+      else {
+        FUN_0047b3c0(&DAT_00c0f910 + iVar1);
+        FUN_0047b3c0(&DAT_00c0f914 + ((uint)local_5 * 0x19 + iVar5) * 0x28);
+        iVar6 = (uint)local_5 * 0x19 + iVar5;
+        if ((*(int *)(&DAT_00c0f900 + iVar6 * 0x28) == 3) ||
+           (*(int *)(&DAT_00c0f900 + iVar6 * 0x28) == 7)) {
+          FUN_0047b340(&DAT_00c0f91c + iVar6 * 0x28);
+        }
+        iVar6 = (uint)local_5 * 0x19 + iVar5;
+        iVar6 = FUN_0067ca30(*(undefined4 *)(&DAT_00c0f910 + iVar6 * 0x28),
+                             &DAT_00c0f908 + iVar6 * 0x28,&LAB_005a47d0,0,0);
+        if (iVar6 == 0) {
+          DAT_00c1dc2c = DAT_00c1dc2c + 1;
+        }
+      }
+      iVar6 = (uint)local_5 * 0x19 + iVar5;
+      iVar6 = FUN_0067d770(*(undefined4 *)(&DAT_00c0f908 + iVar6 * 0x28),
+                           *(undefined4 *)(&DAT_00c0f90c + iVar6 * 0x28),
+                           &DAT_00c0f908 + iVar6 * 0x28,&LAB_005a47d0,0,0);
+      if (iVar6 == 0) {
+        DAT_00c1dc2c = DAT_00c1dc2c + 1;
+      }
+      FUN_0047b3c0(&local_c);
+      *(__time32_t *)(&DAT_00c0f924 + ((uint)local_5 * 0x19 + iVar5) * 0x28) = _Var4 - local_c;
+      iVar5 = iVar5 + 1;
+    } while (iVar5 < (int)(uint)local_6);
+  }
+  bVar2 = DAT_00c1dc10 != 0;
+  bVar3 = DAT_00c1dc14 != 0;
+  *(uint *)(&DAT_00c1dbf0 + (uint)local_5 * 4) = (uint)local_6;
+  if ((bVar2 || bVar3) && (DAT_00c1dc2c == 0)) {
+    FUN_0081b530(0x21e,0);
+  }
+  return 1;
+}
+
+```
+
+### `FUN_006d6d20` @ 006d6d20 -- score 7 -- call site 006d6d8d
+
+```c
+
+/* WARNING: Function: __alloca_probe_16 replaced with injection: alloca_probe */
+/* WARNING: Unable to track spacebase fully for stack */
+/* WARNING: Type propagation algorithm not settling */
+
+undefined4 FUN_006d6d20(uint param_1)
+
+{
+  undefined1 *puVar1;
+  char cVar2;
+  byte bVar3;
+  uint uVar4;
+  uint auStack_c44 [8];
+  undefined4 *apuStack_c24 [766];
+  undefined4 local_20;
+  undefined4 local_1c;
+  undefined4 local_18;
+  undefined4 local_14;
+  undefined4 local_10;
+  undefined1 *local_c;
+  undefined1 *local_8;
+  
+  apuStack_c24[0x2fd] = &local_20;
+  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d37;
+  FUN_0047b400();
+  apuStack_c24[0x2fd] = &local_18;
+  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d42;
+  FUN_0047b400();
+  apuStack_c24[0x2fd] = &local_10;
+  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d4d;
+  FUN_0047b3c0();
+  apuStack_c24[0x2fd] = &param_1;
+  apuStack_c24[0x2fc] = (undefined4 *)0x6d6d58;
+  FUN_0047b340();
+  uVar4 = param_1 & 0xff;
+  apuStack_c24[0x2fd] = (undefined4 *)0x6d6d68;
+  local_c = &stack0xffffffd4 + uVar4 * -8;
+  apuStack_c24[uVar4 * 0xfffffffe + 0x2fd] = (undefined4 *)0x6d6d77;
+  bVar3 = 0;
+  local_8 = &stack0xffffffd4 + uVar4 * -0xc;
+  puVar1 = &stack0xffffffd4 + uVar4 * -0xc;
+  if ((byte)param_1 != '\0') {
+    do {
+      apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)(local_c + (uint)bVar3 * 8);
+      auStack_c44[uVar4 * -3 + 0x304] = 0x6d6d92;
+      FUN_0047b400();
+      apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)(local_8 + (uint)bVar3 * 4);
+      auStack_c44[uVar4 * -3 + 0x304] = 0x6d6da0;
+      FUN_0047b3c0();
+      bVar3 = bVar3 + 1;
+      puVar1 = local_8;
+    } while (bVar3 < (byte)param_1);
+  }
+  local_8 = puVar1;
+  apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)0x1;
+  auStack_c44[uVar4 * -3 + 0x304] = local_14;
+  auStack_c44[uVar4 * -3 + 0x303] = local_18;
+  auStack_c44[uVar4 * -3 + 0x302] = 0x6d6dbd;
+  cVar2 = FUN_006b52e0();
+  if (cVar2 == '\0') {
+    apuStack_c24[uVar4 * 0xfffffffd + 0x2fd] = (undefined4 *)local_14;
+    auStack_c44[uVar4 * -3 + 0x304] = local_18;
+    auStack_c44[uVar4 * -3 + 0x303] = local_10;
+    auStack_c44[uVar4 * -3 + 0x302] = local_1c;
+    auStack_c44[uVar4 * -3 + 0x301] = local_20;
+    auStack_c44[uVar4 * -3 + 0x300] = 0x6d6dda;
+    FUN_005ceef0();
+    auStack_c44[uVar4 * -3 + 0x300] = (uint)local_8;
+    auStack_c44[uVar4 * -3 + 0x2ff] = (uint)local_c;
+    auStack_c44[uVar4 * -3 + 0x2fe] = param_1;
+    auStack_c44[uVar4 * -3 + 0x2fd] = 0x6d6deb;
+    FUN_005cf650();
+  }
+  return 1;
+}
+
+```
+
+### `FUN_0080e1b0` @ 0080e1b0 -- score 7 -- call site 0080e231
+
+```c
+
+/* WARNING: Function: __alloca_probe_16 replaced with injection: alloca_probe */
+/* WARNING: Unable to track spacebase fully for stack */
+/* WARNING: Type propagation algorithm not settling */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void FUN_0080e1b0(int param_1)
+
+{
+  int iVar1;
+  code *pcVar2;
+  undefined4 uVar3;
+  float fVar4;
+  float fVar5;
+  float fVar6;
+  int *piVar7;
+  undefined1 *puVar8;
+  byte bVar9;
+  char cVar10;
+  undefined1 uVar11;
+  undefined4 in_EAX;
+  int *piVar12;
+  int iVar13;
+  undefined4 *puVar14;
+  int *piVar15;
+  float *pfVar16;
+  float *pfVar17;
+  int iVar18;
+  int iVar19;
+  undefined4 uVar20;
+  undefined4 uVar21;
+  uint uVar22;
+  int *piVar23;
+  uint uVar24;
+  int iVar25;
+  uint *puVar26;
+  uint *puVar27;
+  undefined1 *puVar28;
+  undefined1 *puVar30;
+  uint uVar31;
+  uint uVar32;
+  int iVar33;
+  bool bVar34;
+  ushort in_FPUControlWord;
+  float10 extraout_ST0;
+  longlong lVar35;
+  undefined8 uVar36;
+  int aiStack_1c3c [4];
+  byte *apbStack_1c2c [1528];
+  uint auStack_44c [2];
+  byte *pbStack_444;
+  undefined1 local_434 [128];
+  int local_3b4;
+  int *local_3b0;
+  uint local_3a4;
+  uint local_3a0;
+  uint local_39c;
+  uint local_394;
+  uint local_38c;
+  uint local_388;
+  int *local_340;
+  int *local_33c;
+  byte local_338;
+  int local_310;
+  float local_2f8;
+  int aiStack_298 [39];
+  int aiStack_1fc [31];
+  int *local_180;
+  int *local_17c;
+  int local_160;
+  undefined1 local_10c [12];
+  float local_100;
+  float local_fc;
+  float local_f8;
+  undefined4 local_f4;
+  undefined2 local_f0;
+  undefined4 local_ec;
+  undefined4 local_e8;
+  int local_e4;
+  int local_e0;
+  uint local_dc;
+  undefined1 *local_d8;
+  undefined4 local_d4;
+  undefined1 local_d0 [4];
+  undefined8 local_cc;
+  int local_c4;
+  undefined1 *local_c0;
+  uint local_bc;
+  undefined1 *local_b8;
+  int *local_b4;
+  int local_b0;
+  int local_ac;
+  int *local_a8;
+  int *local_a4;
+  int local_a0;
+  float local_9c;
+  float local_98;
+  float local_94;
+  undefined4 local_90;
+  undefined4 local_8c;
+  undefined4 local_88;
+  undefined4 local_84;
+  undefined4 local_80;
+  undefined4 local_7c;
+  undefined4 local_78;
+  undefined4 local_74;
+  undefined4 local_70;
+  int local_6c;
+  uint local_68;
+  undefined1 *local_64;
+  int *local_60;
+  int local_5c;
+  undefined4 local_58;
+  uint local_54;
+  undefined4 *local_50;
+  int *local_4c;
+  int local_48;
+  int local_44;
+  uint local_40;
+  int local_3c;
+```

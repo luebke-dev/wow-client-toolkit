@@ -172,12 +172,13 @@ def score_call_site(call_addr, owner_fn):
         mnem = ins.getMnemonicString().lower()
         if mnem == "lea":
             ops = ins.getDefaultOperandRepresentation(1)
-            if "*" in ops and "0x" in ops:
-                # Scale != 1.
-                if "*2" in ops or "*4" in ops or "*8" in ops:
-                    score += 3
-                    notes.append("scaled-index LEA: `{0}`".format(ops))
-                    break
+            # Ghidra prints scale either as `*2` (decimal) or `*0x2`
+            # (hex) depending on the listing format. Cover both.
+            scale_markers = ("*0x2", "*0x4", "*0x8", "*2", "*4", "*8")
+            if any(m in ops for m in scale_markers):
+                score += 3
+                notes.append("scaled-index LEA: `{0}`".format(ops))
+                break
         cur = ins.getMaxAddress().next()
 
     # Backwards conditional jump in the parent function (loop)?
