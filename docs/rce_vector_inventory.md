@@ -77,10 +77,10 @@ Manual decompile review classifies each:
 |---|---|---|---|
 | `FUN_0054b3f0` | `0x0054b41c` | KNOWN (BG-positions) | Patch 3 closes |
 | `FUN_0054b3f0` | `0x0054b490` | KNOWN (BG-positions, 2nd inner write) | Patch 3 closes (same outer loop) |
-| `FUN_005a4800` | `0x005a4900` | **NEW VULN CANDIDATE** | Loop bound `local_6` is read from packet via `GetInt32(&local_6)` at line 157 of decompile. Inner loop writes 40-byte structs to `&DAT_00c0f900 + (local_5*25 + iVar5) * 0x28` with NO bounds check on `local_6`. Same shape as BG-positions: server picks count, client writes per-element struct to attacker-controlled address. **No mitigation in this repo yet.** |
-| `FUN_006d6d20` | `0x006d6d8d` | NEEDS REVIEW | LEA `[EDI*0x8 + 0x0]` (base loaded into register elsewhere); loop bound is global `0x00c79f98`. If global is packet-derived (likely), same vuln class. |
-| `FUN_0080e1b0` | `0x0080e231 + 0x0080e2a4` | NEEDS REVIEW | Two LEA-scaled writes. High-VA region (0x800000+) suggests init-time / asset-load code, lower attack-surface than packet handlers but worth confirming. |
-| `FUN_00800470` | `0x008004c6` | NEEDS REVIEW | Single LEA-scaled write; high-VA. |
+| `FUN_005a4800` | `0x005a4900` | **CONFIRMED VULN** -- opcode `0x03EE` (`MSG_GUILD_BANK_LOG_QUERY`) | Identified by `identify_handler.py` + binary search for the registration call at file offset 0x001a6be4 (`push 0x005A4800; push 0x03EE; call`). Loop bound `local_6` read from packet via `GetInt32(&local_6)` at line 157 of decompile; inner loop writes 40-byte structs to `&DAT_00c0f900 + (local_5*25 + iVar5) * 0x28` with NO bounds check on `local_6`. Server picks count, client writes per-element struct to attacker-controlled address. **No mitigation in this repo yet.** |
+| `FUN_00800470` | `0x008004c6` | **CONFIRMED VULN** -- opcode `0x0330` (`SMSG_SPELL_UPDATE_CHAIN_TARGETS`) | Found at file offset 0x0040f64e (`push 0x00800470; push 0x0330; call`). LEA `[EBX*0x8 + 0x0]`. Server-controlled chain-target list; same shape. **No mitigation yet.** |
+| `FUN_006d6d20` | `0x006d6d8d` | UNREACHED | No static address reference in the binary. Either dead code or runtime-built vtable. Loop bound is global `0x00c79f98`. Lower attack-surface assumption. |
+| `FUN_0080e1b0` | `0x0080e231 + 0x0080e2a4` | UNREACHED | No static address reference; high-VA region. Likely init-time / addon-system code. |
 
 ### Mitigation strategy options
 
