@@ -69,6 +69,16 @@ HANDLERS = [
     ("0x096 + 0x3B3 indirect", "0x0050be70"),
     ("0x436 indirect via SMSG_CALENDAR_SEND_CALENDAR", "0x005c29c0"),
     ("0x1EC indirect via SMSG_AUTH_CHALLENGE 2-deep", "0x005f79a0"),
+    # 9 new memcpy/memmove-using handlers (non-CDataStore primitives)
+    ("0x244 SMSG_ITEM_TEXT_QUERY_RESPONSE", "0x00635a40"),
+    ("0x20E SMSG_CHANGEPLAYER_DIFFICULTY_RESULT", "0x0052c460"),
+    ("0x28D SMSG_AUCTION_REMOVED_NOTIFICATION", "0x005a0ac0"),
+    ("0x496 SMSG_AURA_UPDATE", "0x007300a0"),
+    ("0x3C5 SMSG_KICK_REASON", "0x004d9500"),
+    ("0xFD opcode-unknown", "0x00530920"),
+    ("0x39E SMSG_VOICE_SESSION_ROSTER_UPDATE", "0x006ccf10"),
+    ("0x239 SMSG_SEND_MAIL_RESULT", "0x005717b0"),
+    ("0x17D SMSG_GOSSIP_MESSAGE", "0x0058b1b0"),
     # 14 still-truly-unreached score-4 (placeholder for completeness)
     ("(unreached) 0x004d5550", "0x004d5550"),
     ("(unreached) 0x004d7230", "0x004d7230"),
