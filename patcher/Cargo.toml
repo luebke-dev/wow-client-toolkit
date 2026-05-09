@@ -1,0 +1,22 @@
+[package]
+name = "wow-exe-patcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Static byte patcher for the WoW 3.3.5a Wow.exe client (RCE hardening + tswow tables + version/build rewrites)."
+readme = "../README.md"
+
+[lib]
+name = "wow_exe_patcher"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wow-exe-patcher"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

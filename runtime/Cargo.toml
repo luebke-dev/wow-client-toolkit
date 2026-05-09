@@ -1,0 +1,36 @@
+[package]
+name = "wow-rce-watcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = """
+Runtime detector + blocker for the WoW 3.3.5a Wow.exe RCE class.
+Loaded as a DLL into Wow.exe via the bundled launcher; hooks the
+manual Warden module loader, inspects every server-supplied PE
+buffer, and either passes it through (trusted Blizzard module) or
+blocks the load (heuristic red-flag). Audit log lives at
+%APPDATA%\\\\wow-rce-watcher\\\\events.jsonl.
+"""
+
+# cdylib produces wow_rce_watcher.dll; the [[bin]] in src/bin/
+# produces wow-rce-watcher.exe (the launcher). Both ship together
+# and target i686-pc-windows-gnu.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+md-5 = { version = "0.10", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Security",
+] }

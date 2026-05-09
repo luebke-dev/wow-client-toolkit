@@ -1,0 +1,20 @@
+# Rust
+target/
+
+# Ghidra audit working state -- regenerate locally
+audit/project/
+
+# Copyrighted Blizzard binary -- never commit. Operators supply
+# their own copy of audit/input/Wow.exe (build 12340).
+audit/input/
+
+# Captured server-pushed PE modules from runtime forensic dumps.
+# Per-session evidence; commit individually, not en masse.
+audit/captures/
+
+# Editor / OS noise
+*.swp
+*.swo
+.idea/
+.vscode/
+.DS_Store
