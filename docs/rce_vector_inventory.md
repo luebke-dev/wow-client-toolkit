@@ -117,27 +117,44 @@ Manual byte-level inspection has classified each candidate:
 | `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
 
 **Updated conclusion** (after byte-level scan + Ghidra decompile
-of all 13 candidates):
+of all 13 score-7 candidates AND all 33 score-4 [REVIEW]
+candidates):
 
 | Severity | Count | Opcodes |
 |---|---|---|
-| **Unbounded fixed-base (BG-positions class)** | 2 | original `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x2C0` -> `FUN_0054b3f0`, **patched** by Patch 3); **NEW: `MSG_GUILD_PERMISSIONS` (`0x3FD` -> `FUN_005cb9f0`, NOT patched)** |
-| **Out-of-bounds-pointer class** | 1 | `SMSG_GUILD_BANK_LIST` (`0x3E8`) -- byte tab-id used as unchecked array index, fetched pointer becomes write destination |
+| **Unbounded fixed-base (BG-positions class)** | 3 | `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x2C0` -> `FUN_0054b3f0`, **patched** by Patch 3); **NEW: `MSG_GUILD_PERMISSIONS` (`0x3FD` -> `FUN_005cb9f0`, NOT patched, multiplier 14)**; **NEW: `SMSG_GUILD_ROSTER` (`0x08A` -> `FUN_005cc5d0`, NOT patched, multiplier 56 (= 14 dwords)) -- the MOTD-records loop bound `DAT_00c22ab8` is `GetUInt32`, per-iteration writes 14 dwords to `0xC21E64 + i*56`** |
+| **Out-of-bounds-pointer class** | 1 | `SMSG_GUILD_BANK_LIST` (`0x3E8`) -- byte tab-id used as unchecked array index |
+| **Possible heap-overflow (realloc-failure)** | 2 | `SMSG_RAID_INSTANCE_INFO` (`0x2CC`), `SMSG_EXPECTED_SPAM_RECORDS` (`0x332`) -- both call a grow function with packet-supplied count then write `count * stride` bytes; if the allocator fails silently the writes spill past the old buffer. Severity depends on whether `FUN_00500f10` / `FUN_004ffce0` abort on OOM (likely) or return silently. |
 | **Bounded write (byte-counter / small radius)** | 2 | `0x121` (1 KiB window), `0x3EE` (~260 KiB window) |
 | **DoS-only (heap-vec / alloca)** | 7 | `0x23D`, `0x2A5`, `0x330`, `0x367`, `0x368`, `0x369`, `0x490` |
-| **Safe (bounded indexes / fixed iteration count)** | 2 | `0x34E`, `0x35B` |
+| **Safe (explicit cap / bounded index / sanitized lookup)** | 6+ | `0x34E`, `0x35B`, `0x2D4` (cap 1), `0x4BC` (cap 9), `0x3F1`/`0x3F2` (channel-id from name lookup), `0x360` (hash-table lookup) -- plus 11 score-4 handlers with no danger pattern (`0x0A9` SMSG_UPDATE_OBJECT, `0x12A`, `0x179`, `0x23B`, `0x25F`, `0x26F`, `0x3B8`, `0x3BB`, `0x44A`, the 2 shared-dispatchers) |
 
-**Found one NEW BG-positions class arbitrary write**:
-`MSG_GUILD_PERMISSIONS` (`0x3FD`). Same shape as the documented
-BG vuln, just a different multiplier (14 instead of 8).
-**Patch 3 does not cover it** -- a fresh patch is needed.
+**Found TWO NEW BG-positions class arbitrary writes**:
+`MSG_GUILD_PERMISSIONS` (`0x3FD`, multiplier 14) and
+`SMSG_GUILD_ROSTER` (`0x08A`, multiplier 56). Both same shape as
+the documented BG vuln. **Patch 3 does not cover either** --
+fresh patches are needed.
 
 **Practical implication for the patcher:** Patches 1+2+3 cover
-the documented chain but **leave at least one BG-positions class
-sister vuln open** (`MSG_GUILD_PERMISSIONS`). The minimal addition
-is a Patch 4 that caps `local_c` after the `GetUInt32(&local_c)`
-in `FUN_005cb9f0`. Plus a Patch 5 for the out-of-bounds tab-id
-in `SMSG_GUILD_BANK_LIST`.
+the documented chain but **leave at least two BG-positions class
+sister vulns open** (`MSG_GUILD_PERMISSIONS` and
+`SMSG_GUILD_ROSTER`) plus one OOB-pointer class
+(`SMSG_GUILD_BANK_LIST`) and two possible heap-overflow class
+(`SMSG_RAID_INSTANCE_INFO`, `SMSG_EXPECTED_SPAM_RECORDS`,
+pending realloc-failure-mode confirmation). Minimal additions:
+
+- **Patch 4** (MSG_GUILD_PERMISSIONS): cap `local_c` after the
+  `GetUInt32(&local_c)` in `FUN_005cb9f0` to a small immediate
+  (max valid guild-rank is ~10).
+- **Patch 5** (SMSG_GUILD_ROSTER): cap `DAT_00c22ab8` after the
+  `GetUInt32(&DAT_00c22ab8)` in `FUN_005cc5d0` to a small
+  immediate (max MOTD records is 10 per the in-source check
+  `if (9 < local_c) goto LAB_005cc773` -- which fires AFTER the
+  loop and thus is useless as a bounds check).
+- **Patch 6** (SMSG_GUILD_BANK_LIST): cap `local_5` (tab-id)
+  after the `GetUInt8(&local_5)` to max 7.
+- **Patch 7+8** (RAID_INSTANCE_INFO, EXPECTED_SPAM_RECORDS):
+  cap loop counts to AC documented maxima.
 
 **Practical implication for the runtime DLL:** the IAT-detour
 hooks on `CreateFileA` / `InternetOpenA` / `HttpSendRequestA`
