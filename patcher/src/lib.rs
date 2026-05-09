@@ -444,6 +444,14 @@ struct SecurityPatch {
 ///    but no longer offers an attacker-controlled scaled write.
 ///    Same severity as Patch 3 but for opcode `0x3FD` instead of
 ///    `0x2C0`.
+///
+/// 5. **NEW (added 2026-05-09):** `SMSG_GUILD_ROSTER` MOTD-loop
+///    bound cap, FUN_005CC5D0 + 0x145: replace the 6-byte
+///    `cmp eax, [0xC22AB8]` (compare against unbounded packet
+///    count) with `cmp eax, 10` + 3 NOPs. Caps the loop at 10
+///    iterations (matching the in-source post-loop sanity check
+///    that the original developer placed AFTER the loop and
+///    that thus does not actually bound the writes).
 const RCE_HARDENING_PATCHES: &[SecurityPatch] = &[
     SecurityPatch {
         offset: 0x000002A7,
@@ -486,6 +494,27 @@ const RCE_HARDENING_PATCHES: &[SecurityPatch] = &[
         expected: &[0x2B, 0xD0],
         new: &[0x33, 0xD2],
         name: "rce.guild-permissions-arith-4",
+    },
+    // Patch 5: SMSG_GUILD_ROSTER MOTD loop bound cap.
+    // Handler FUN_005CC5D0 reads `DAT_00C22AB8` via GetUInt32 and
+    // uses it as the upper bound of a do-while loop that writes
+    // 14 dwords (56 bytes) per iteration to `&DAT_00C21E64 +
+    // local_c * 56`. Server picks the count to make destination
+    // wrap modulo 2^32 and target any 8-byte-aligned address.
+    // The post-loop sanity check (`if (9 < local_c)`) confirms
+    // the intended max is 10 entries -- so we cap the loop
+    // comparison at 10.
+    //
+    // Original (file 0x1CBB15):
+    //   3B 05 B8 2A C2 00    cmp eax, [0xC22AB8]   (6 bytes)
+    // Replacement:
+    //   83 F8 0A             cmp eax, 10            (3 bytes)
+    //   90 90 90             nop nop nop            (3 bytes)
+    SecurityPatch {
+        offset: 0x001CBB15,
+        expected: &[0x3B, 0x05, 0xB8, 0x2A, 0xC2, 0x00],
+        new: &[0x83, 0xF8, 0x0A, 0x90, 0x90, 0x90],
+        name: "rce.guild-roster-motd-loop-cap",
     },
 ];
 
