@@ -1,8 +1,19 @@
 # wow-client-toolkit
 
-Defensive + analysis toolkit for the World of Warcraft 3.3.5a
-client (Wow.exe build 12340, MD5 `5758d89ed392e2190c44c5183a6d23a3`,
-size 7,699,456 bytes).
+A toolkit for the World of Warcraft 3.3.5a client (Wow.exe build
+12340, MD5 `5758d89ed392e2190c44c5183a6d23a3`, size 7,699,456
+bytes) covering three needs that operators and private-server
+players run into:
+
+1. **Security hardening** -- close the documented RCE chain
+   plus the sister vulns the `audit/` scripts discovered.
+2. **Quality-of-life feature toggles** -- the canonical tswow
+   binary patches (`large-address-aware`, `view-distance-unlock`,
+   `allow-custom-gluexml`, `item-dbc-disabler`) plus version /
+   build rewriting.
+3. **Server-behavior visibility** -- a runtime DLL that prompts
+   per Warden module, logs file/HTTP/registry/process activity,
+   and dumps server-pushed payloads for offline analysis.
 
 > **AI-driven analysis disclosure.** Every reverse-engineering
 > finding, byte-level patch, hook, Ghidra script, and write-up in
@@ -17,8 +28,8 @@ independent of any private-server project:
 
 | Component | Output | Target | Role |
 |---|---|---|---|
-| `patcher/` | `wow-exe-patcher` | host | **Static byte patcher** for Wow.exe. Closes the three vectors of the documented RCE chain (`.zdata` no-execute / Warden-loader no-execute / BG-positions loop cap) **plus two newer same-shape sister vulns discovered by `audit/`** (`MSG_GUILD_PERMISSIONS` arithmetic-neutralization, `SMSG_GUILD_ROSTER` MOTD loop-cap). Also bundles tswow-style feature toggles + version/build rewrites. |
-| `runtime/` | `wow_rce_watcher.dll` + `wow-rce-watcher.exe` | i686-pc-windows-gnu | **Runtime observer + per-module gate.** Loaded into Wow.exe via DLL injection. Hooks the manual Warden module loader and the BG-positions handler, logs every server-supplied PE buffer + every BG packet's iteration count, dumps the raw module bytes to disk, and pops a synchronous **Yes/No prompt** for every non-canonical Warden module ("Server wants to load XYZ -- allow?"). User clicks Yes -> module runs as if the DLL weren't there; click No -> the loader returns 0 and the bytes never execute. Canonical Blizzard modules are silently allowed; failed-to-display dialogs default to reject. |
+| `patcher/` | `wow-exe-patcher` | host | **Static byte patcher** for Wow.exe. Two patch families ship together: (a) **RCE-hardening** -- closes the 3 documented chain vectors (`.zdata` no-execute / Warden-loader no-execute / BG-positions loop cap) **plus 2 sister vulns the audit found** (`MSG_GUILD_PERMISSIONS` arithmetic-neutralization, `SMSG_GUILD_ROSTER` MOTD loop-cap); (b) **QoL toggles** -- the tswow `ClientPatches.ts` byte tables: `large-address-aware` (4 GiB user space), `view-distance-unlock` (raise the camera-clamp), `allow-custom-gluexml` (TOC.SIG bypass for unsigned AddOns), `item-dbc-disabler` (server-side item template). Plus `--version` / `--build` string rewrites and a `probe` diagnostic. Each patch is opt-in via a CLI flag; RCE-hardening is on by default. |
+| `runtime/` | `wow_rce_watcher.dll` + `wow-rce-watcher.exe` | i686-pc-windows-gnu | **Runtime observer + per-module gate.** Loaded into Wow.exe via DLL injection. Hooks the manual Warden module loader and the BG-positions handler, logs every server-supplied PE buffer + every BG packet's iteration count, dumps the raw module bytes to disk, and pops a synchronous **Yes/No prompt** for every non-canonical Warden module ("Server wants to load XYZ -- allow?"). User clicks Yes -> module runs as if the DLL weren't there; click No -> the loader returns 0 and the bytes never execute. Canonical Blizzard modules are silently allowed; failed-to-display dialogs default to reject. Plus 8 Win32 API detour hooks (CreateFileA / InternetOpenA / HttpSendRequestA / ShellExecuteA / CreateProcessA / LoadLibraryA / RegOpenKeyExA / RegSetValueExA) for forensic logging of post-RCE behavior. |
 | `audit/` | Ghidra Jython scripts | host | **Static audit / re-derivation** scripts. Locate write-primitive call sites, candidate Warden hook points, IAT entries needed for shellcode tracing. Used to validate the patch byte tables and to scout for sister-vulnerabilities to close. |
 
 The three are **complementary**: static patches are bedrock and
@@ -27,13 +38,17 @@ allow/reject control + forensic visibility (which servers send
 which payload, what they import, where they wanted to write);
 the audit scripts re-derive everything from the binary so the
 patch tables stay verifiable. Recommended deployment is
-**patcher first** (safety) **then runtime alongside**
+**patcher first** (safety + QoL) **then runtime alongside**
 (per-module gate + visibility).
 
-This project bundles the cumulative public knowledge on the 3.3.5a
-RCE class (TechMecca's writeup, stoneharry's RCEPatcher, Saty's
-PoC2.0, brian8544's PoC1) plus original analysis for Vector 3
-(BG-positions loop) which closes the remaining bypass primitive.
+The RCE-hardening side bundles the cumulative public knowledge
+on the 3.3.5a RCE class (TechMecca's writeup, stoneharry's
+RCEPatcher, Saty's PoC2.0, brian8544's PoC1) plus original
+analysis (Vector 3 = BG-positions loop, Vectors 4 + 5 = the
+guild-permissions / guild-roster sister vulns this project's
+audit discovered). The QoL side is a faithful Rust port of
+tswow's `ClientPatches.ts` byte tables -- same offsets, same
+bytes, just a strict pre-byte verifier on top.
 
 ---
 
@@ -134,6 +149,37 @@ operator can't redistribute a patched binary.
 
 ---
 
+## Quality-of-life patch family (tswow ports)
+
+Independent of the security-hardening work, the patcher also
+includes the four canonical QoL byte tables from
+[tswow's ClientPatches.ts](https://github.com/tswow/tswow/blob/main/tswow-scripts/util/ClientPatches.ts).
+Each is opt-in via a CLI flag; none changes default behavior of
+`wow-exe-patcher patch`.
+
+| Flag | What it does | Why you'd want it |
+|---|---|---|
+| `--large-address-aware` | Sets the `IMAGE_FILE_LARGE_ADDRESS_AWARE` bit in the PE header. | Wow.exe is 32-bit; the OS normally hands it 2 GiB of user-space VAS. With LAA + a 64-bit Windows kernel the process gets up to 4 GiB. **Reduces "out of memory" crashes** with large model packs / high-res texture replacements / heavy AddOns. Zero compatibility risk. |
+| `--view-distance-unlock` | Raises the camera-distance clamp ceiling from the engine default. | Lets you actually USE the in-game `farclip` slider past Blizzard's hard cap. Same scenes the engine renders for screenshots, now playable. |
+| `--allow-custom-gluexml` (alias `--unlock-signatures`) | TOC.SIG bypass: stops the loader from rejecting unsigned AddOns at the login + character-select screens. | Required for any custom UI / GlueXML AddOn (login customization, character-select screen overhauls). Without it, only Blizzard-signed AddOns load at the glue layer. |
+| `--item-dbc-disabler` | Disables the client's local `Item.dbc` lookup so it falls back to the server-side `SMSG_ITEM_QUERY_RESPONSE` instead. | Required when your server defines custom items beyond the client's `Item.dbc` ID space. Without it, the client refuses to display items not in its own DBC. The standard private-server "custom items" workaround. |
+| `--all-tswow` | Shorthand for the four above. | Convenient default for private-server clients. |
+
+Plus version / build rewriting:
+
+| Flag | What it does |
+|---|---|
+| `--version <STRING>` | Replaces `3.3.5` in `.rdata` (must fit in the existing slot + trailing NULs). Useful for showing a custom build label in the in-game `/console version` output. |
+| `--build <N>` | Replaces all occurrences of build number `12340` with `<N>`. Useful for testing tswow / AC client-fork builds against a server expecting a custom build number. |
+| `--probe` | Reports current version offset, all build-number occurrences, and the bytes at each known patch site. No write. Useful diagnostic for unknown Wow.exe builds (custom server distributions etc.). |
+
+All QoL patches have the same strict pre-byte verifier as the
+RCE-hardening ones -- the patcher refuses to write if the input
+bytes don't match the canonical 12340 build, so a wrong-build
+or already-modified Wow.exe never gets corrupted.
+
+---
+
 ## Quick start
 
 ### 1. Patch the binary (recommended baseline)
@@ -149,11 +195,25 @@ cargo build --release -p wow-exe-patcher
 
 Default mode applies all 5 RCE-hardening patches (8 SecurityPatch
 entries since Patch 4 has 4 byte-edits in the same function) with
-strict pre-byte verification and recomputes the PE checksum. The
-patcher refuses to write anything if the input doesn't match the
-canonical 12340 build.
+strict pre-byte verification and recomputes the PE checksum. No
+QoL toggles are applied unless you ask for them.
 
-Verify:
+To also apply the QoL toggles (large-address-aware,
+view-distance-unlock, allow-custom-gluexml, item-dbc-disabler):
+
+```sh
+./target/release/wow-exe-patcher patch \
+    --input  /path/to/Wow.exe \
+    --output /path/to/Wow_safe.exe \
+    --all-tswow
+```
+
+Or pick individually -- each QoL flag is opt-in. See the
+"Quality-of-life patch family" section above for what each does
+and when you'd want it.
+
+Verify (the `verify` command checks the RCE-hardening table only;
+QoL toggles are reported by `probe`):
 
 ```sh
 ./target/release/wow-exe-patcher verify --input /path/to/Wow_safe.exe
