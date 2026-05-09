@@ -106,42 +106,38 @@ Manual byte-level inspection has classified each candidate:
 | `0x23D` | `SMSG_BATTLEFIELD_LIST` | `FUN_0054e390` | **DoS-only**: capacity-check pattern (cmp local, [global_capacity_store]) -> heap-vec realloc, fails safely on huge counts. |
 | `0x2A5` | `SMSG_SET_FORCED_REACTIONS` | `FUN_005d15d0` | **DoS-only**: destination `[edx + esi*8]` where `edx = [0x00C23494]` is a heap-pointer load. Function does pre-loop realloc to grow the vec; with `count=2^32` malloc of 32 GiB fails -> safe failure path. No arbitrary write. |
 | `0x330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | `FUN_00800470` | **DoS-only**: destination `[eax + esi*8]` where `eax` is from `_alloca(count*8)` -- stack allocation. Huge count -> stack-overflow crash, no controlled write. |
-| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | **needs decompile**: no capacity-check pattern detected, no fixed-base LEA detected (heuristic hit nothing in 1 KiB scan). Could be either safe (no scaled-LEA write) or have a pattern the heuristic misses. |
-| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | **needs decompile**: heuristic flags BOTH capacity-check AND fixed-base LEA -- most likely heap-vec for the main array PLUS a small fixed-globals scratch area for stats. Severity depends on whether the fixed-base writes are bounded. |
+| `0x34E` | `SMSG_ARENA_TEAM_ROSTER` | `FUN_005a3e10` | **DoS-only**: outer loop bounded `uVar2 < 0xa8 / 0x38 = 3` (max 3 teams). Inner per-member loops write to heap pointer stored in `(&DAT_00c0f84c)[uVar5 * 0xe]` (heap allocation). Can't escape that allocation. |
+| `0x35B` | `SMSG_ARENA_TEAM_STATS` | `FUN_005a2d50` | **safe**: 6 GetUInt32 writes to fixed globals `DAT_00c0f860..0xC0F874 + iVar3 * 0x38` where `iVar3` is bounded by outer-loop `uVar2 < 0xa8` -> max 3 iterations. No attacker-controlled scaling. |
 | `0x367` | `SMSG_LFG_UPDATE_PLAYER` | `FUN_0055bdc0` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
 | `0x368` | `SMSG_LFG_UPDATE_PARTY` | `FUN_0055bdc0` | **DoS-only** (same handler shared with 0x367/0x369). |
 | `0x369` | `SMSG_LFG_UPDATE_SEARCH` | `FUN_0055bdc0` | **DoS-only** (same handler). |
-| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | **needs decompile**: no capacity-check detected, no fixed-base LEA detected. Heuristic blindspot. |
+| `0x3E8` | `SMSG_GUILD_BANK_LIST` | `FUN_005a7250` | **EXPLOITABLE (out-of-bounds pointer-read class)**: tab-id `local_5` is `GetUInt8` (max 255). Destination pointer fetched via `(&DAT_00c1dc40)[(uint)local_5 * 4]` with NO bounds check on `local_5`. Game expects ~8 valid tab-ids; server sending `local_5 = 255` reads garbage from `DAT_00c1dc40 + 0x3FC` and uses that as the heap-pointer base for the per-item writes. Less directly controllable than the BG-positions arithmetic primitive but still an arbitrary-write-via-garbage-pointer. |
 | `0x3EE` | `MSG_GUILD_BANK_LOG_QUERY` | `FUN_005a4800` | **bounded**: `local_5` (tab id) and `local_6` (loop count) both `GetUInt8` (max 255). Destination range = `&DAT_00C0F900 .. +260 KiB`. Exploitable for overwriting a global in that window but NOT the unbounded-uint32 shape of BG-positions. |
-| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | **mixed**: capacity-check + fixed-base LEA detected. Likely heap-vec main + fixed-globals scratch. Decompile needed. |
+| `0x3FD` | `MSG_GUILD_PERMISSIONS` | `FUN_005cb9f0` | **EXPLOITABLE (BG-positions class -- NEW)**: `local_c = GetUInt32` from packet (uint32, max 4 billion). Destination = `&DAT_00c21e60 + local_c * 14`. Server picks `local_c` to make the address resolve to ANY 4-byte-aligned address in 32-bit space (modular arithmetic via `local_c = (target - 0xC21E60) / 14`). 8 GetUInt32 writes per packet (4 bytes each, server-controlled value), all at `base + local_c * 14 + offset`. **Identical severity shape to BG-positions.** No mitigation in this repo yet. |
 | `0x490` | `SMSG_AUCTION_LIST_PENDING_SALES` | `FUN_0059e880` | **DoS-only**: capacity-check pattern, heap-vec, fails safely. |
 
-**Updated conclusion** (after byte-level scan of all 13):
+**Updated conclusion** (after byte-level scan + Ghidra decompile
+of all 13 candidates):
 
 | Severity | Count | Opcodes |
 |---|---|---|
-| **DoS-only (heap-vec / alloca)** | 6 | `0x23D`, `0x2A5`, `0x330`, `0x367`, `0x368`, `0x369`, `0x490` |
+| **Unbounded fixed-base (BG-positions class)** | 2 | original `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x2C0` -> `FUN_0054b3f0`, **patched** by Patch 3); **NEW: `MSG_GUILD_PERMISSIONS` (`0x3FD` -> `FUN_005cb9f0`, NOT patched)** |
+| **Out-of-bounds-pointer class** | 1 | `SMSG_GUILD_BANK_LIST` (`0x3E8`) -- byte tab-id used as unchecked array index, fetched pointer becomes write destination |
 | **Bounded write (byte-counter / small radius)** | 2 | `0x121` (1 KiB window), `0x3EE` (~260 KiB window) |
-| **Mixed / needs decompile** | 4 | `0x34E`, `0x35B`, `0x3E8`, `0x3FD` |
-| **Unbounded fixed-base (BG-positions class)** | 1 | only the original `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x2C0` -> `FUN_0054b3f0`) |
+| **DoS-only (heap-vec / alloca)** | 7 | `0x23D`, `0x2A5`, `0x330`, `0x367`, `0x368`, `0x369`, `0x490` |
+| **Safe (bounded indexes / fixed iteration count)** | 2 | `0x34E`, `0x35B` |
 
-The BG-positions vuln IS likely the unique unbounded-fixed-base
-case in Wow.exe build 12340. The audit's score-7 false positives
-came from handlers using either the heap-vec realloc pattern
-(safe on OOM) or `_alloca` (safe on stack overflow) -- both fail
-to controlled crashes rather than arbitrary writes.
+**Found one NEW BG-positions class arbitrary write**:
+`MSG_GUILD_PERMISSIONS` (`0x3FD`). Same shape as the documented
+BG vuln, just a different multiplier (14 instead of 8).
+**Patch 3 does not cover it** -- a fresh patch is needed.
 
-The four "mixed" handlers (`0x34E`, `0x35B`, `0x3E8`, `0x3FD`)
-combine a heap-grown main array with a fixed-globals scratch
-area; the fixed writes might be byte-bounded (low severity) or
-uint32-bounded (BG-class). Pending decompile.
-
-**Practical implication for the patcher:** the existing Patches
-1+2+3 likely cover the entire native-RCE surface of the client.
-Adding Patch 4+ for the four mixed-pattern handlers is worthwhile
-*if* the scratch-area writes turn out to be uint32-bounded; they
-will likely turn out to be small-and-bounded but the verification
-is the next step.
+**Practical implication for the patcher:** Patches 1+2+3 cover
+the documented chain but **leave at least one BG-positions class
+sister vuln open** (`MSG_GUILD_PERMISSIONS`). The minimal addition
+is a Patch 4 that caps `local_c` after the `GetUInt32(&local_c)`
+in `FUN_005cb9f0`. Plus a Patch 5 for the out-of-bounds tab-id
+in `SMSG_GUILD_BANK_LIST`.
 
 **Practical implication for the runtime DLL:** the IAT-detour
 hooks on `CreateFileA` / `InternetOpenA` / `HttpSendRequestA`
