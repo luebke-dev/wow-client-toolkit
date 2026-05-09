@@ -21,11 +21,14 @@ independent of any private-server project:
 | `runtime/` | `wow_rce_watcher.dll` + `wow-rce-watcher.exe` | i686-pc-windows-gnu | **Runtime observer + per-module gate.** Loaded into Wow.exe via DLL injection. Hooks the manual Warden module loader and the BG-positions handler, logs every server-supplied PE buffer + every BG packet's iteration count, dumps the raw module bytes to disk, and pops a synchronous **Yes/No prompt** for every non-canonical Warden module ("Server wants to load XYZ -- allow?"). User clicks Yes -> module runs as if the DLL weren't there; click No -> the loader returns 0 and the bytes never execute. Canonical Blizzard modules are silently allowed; failed-to-display dialogs default to reject. |
 | `audit/` | Ghidra Jython scripts | host | **Static audit / re-derivation** scripts. Locate write-primitive call sites, candidate Warden hook points, IAT entries needed for shellcode tracing. Used to validate the patch byte tables and to scout for sister-vulnerabilities to close. |
 
-The two are **complementary**: static patches are bedrock and
-survive any RCE attempt; the runtime observer adds forensic
-visibility (which servers send the exploit packet, when, with which
-shellcode payload). Recommended deployment is **patcher first**
-(safety) **then runtime alongside** (visibility).
+The three are **complementary**: static patches are bedrock and
+survive any RCE attempt; the runtime DLL adds per-module
+allow/reject control + forensic visibility (which servers send
+which payload, what they import, where they wanted to write);
+the audit scripts re-derive everything from the binary so the
+patch tables stay verifiable. Recommended deployment is
+**patcher first** (safety) **then runtime alongside**
+(per-module gate + visibility).
 
 This project bundles the cumulative public knowledge on the 3.3.5a
 RCE class (TechMecca's writeup, stoneharry's RCEPatcher, Saty's
