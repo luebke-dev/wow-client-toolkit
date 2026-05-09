@@ -75,6 +75,57 @@ impl Event {
         }
     }
 
+    /// Logged after the user clicked **No** on the per-module
+    /// allow-or-reject prompt. The loader returns 0 to its
+    /// caller, no module bytes are mapped, and the server-side
+    /// will likely time out + drop the connection.
+    pub fn module_blocked(verdict: &Verdict) -> Self {
+        let md5 = verdict
+            .md5
+            .iter()
+            .fold(String::new(), |mut s, b| {
+                use std::fmt::Write;
+                let _ = write!(s, "{:02x}", b);
+                s
+            });
+        Self {
+            kind: "module_blocked",
+            fields: vec![
+                ("md5".into(), md5),
+                ("verdict".into(), sanitize(&verdict.reason)),
+                (
+                    "note".into(),
+                    "user rejected the non-canonical Warden module; loader returned 0".into(),
+                ),
+            ],
+        }
+    }
+
+    /// Logged after the user clicked **Yes** on the per-module
+    /// allow-or-reject prompt. The module proceeds to load + run
+    /// as if the DLL were not present.
+    pub fn module_user_allowed(verdict: &Verdict) -> Self {
+        let md5 = verdict
+            .md5
+            .iter()
+            .fold(String::new(), |mut s, b| {
+                use std::fmt::Write;
+                let _ = write!(s, "{:02x}", b);
+                s
+            });
+        Self {
+            kind: "module_user_allowed",
+            fields: vec![
+                ("md5".into(), md5),
+                ("verdict".into(), sanitize(&verdict.reason)),
+                (
+                    "note".into(),
+                    "user explicitly allowed this non-canonical Warden module via prompt".into(),
+                ),
+            ],
+        }
+    }
+
     /// Logged with HIGH PRIORITY whenever a Warden module's MD5
     /// does not match the canonical Blizzard 3.3.5a Win module
     /// (`79C0768D657977D697E10BAD956CCED1`). Greppable for

@@ -195,20 +195,23 @@ extern "C" fn hook_entry() {
     );
 }
 
-/// Plain cdecl callback the naked hook invokes. ALWAYS returns 1
-/// (allow) -- this DLL is observation-only. The verdict is
-/// computed solely for logging; whatever the server pushed runs.
+/// Plain cdecl callback the naked hook invokes. Returns 1 to
+/// allow the original loader to map + execute the module, or 0
+/// to make the loader fail cleanly (FUN_00872350's caller sees
+/// "module load failed" -- no execution happens).
+///
+/// Canonical Blizzard 3.3.5a Win Warden modules (MD5 `79C0768D
+/// 657977D697E10BAD956CCED1`) are always allowed silently. For
+/// any non-canonical module a synchronous Yes/No MessageBox is
+/// shown describing the module (MD5 + verdict + first imports)
+/// and the user decides per-module whether to allow or reject
+/// it. Reject -> the loader returns "load failed" and no module
+/// code ever runs.
 #[unsafe(no_mangle)]
 extern "C" fn inspect_and_decide(out_ptr: *const u8, buf_ptr: *const u8) -> u32 {
     let verdict = inspect_buffer(buf_ptr);
     log::write_event(&log::Event::module_seen_with_ctx(&verdict, out_ptr as usize));
 
-    // Non-canonical Warden module: log a separate high-priority
-    // event (easy to grep for) and pop a desktop alert so the
-    // operator IMMEDIATELY knows the server is pushing a custom
-    // module. The legit Blizzard 3.3.5a Win Warden module has a
-    // bit-identical MD5 across years of private-server use; any
-    // other hash is at minimum suspicious.
     let is_canonical_blizzard = verdict.md5
         == [
             0x79, 0xC0, 0x76, 0x8D, 0x65, 0x79, 0x77, 0xD6, 0x97, 0xE1, 0x0B, 0xAD, 0x95, 0x6C,
@@ -217,51 +220,76 @@ extern "C" fn inspect_and_decide(out_ptr: *const u8, buf_ptr: *const u8) -> u32 
     let has_payload = verdict.md5 != [0u8; 16]; // [0; 16] = parse failed, not a real MD5
     if has_payload && !is_canonical_blizzard {
         log::write_event(&log::Event::non_canonical_warden(&verdict));
-        notify_user_non_canonical(&verdict);
+
+        let allowed = prompt_user_allow_non_canonical(&verdict);
+        if !allowed {
+            log::write_event(&log::Event::module_blocked(&verdict));
+            return 0;
+        }
+        log::write_event(&log::Event::module_user_allowed(&verdict));
     }
 
     1
 }
 
-/// Pop a Windows MessageBox describing the non-canonical Warden
-/// module. Best-effort: failures to open the box are silently
-/// swallowed (e.g. running as a service with no interactive
-/// desktop). Threaded so the original Wow.exe call path doesn't
-/// stall on the modal dialog.
-fn notify_user_non_canonical(verdict: &decision::Verdict) {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONWARNING, MB_OK};
+/// Pop a SYNCHRONOUS Yes/No MessageBox: "Server wants to load
+/// this non-canonical Warden module. Allow?". Returns true if the
+/// user clicks Yes (allow), false on No (reject).
+///
+/// The dialog blocks the FUN_00872350 hook path until the user
+/// answers. That stalls Wow.exe's network thread; the server-
+/// side may time out and disconnect, which is the expected
+/// behavior when a user rejects an unknown module.
+///
+/// Failures to open the dialog (e.g. running headless under
+/// a non-interactive desktop) default to **reject** -- safer to
+/// drop a server's payload than to silently allow it when the
+/// user can't see the prompt.
+fn prompt_user_allow_non_canonical(verdict: &decision::Verdict) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBoxA, IDYES, MB_DEFBUTTON2, MB_ICONWARNING, MB_SYSTEMMODAL, MB_TOPMOST, MB_YESNO,
+    };
     let mut hex = String::with_capacity(32);
     for b in &verdict.md5 {
         use std::fmt::Write;
         let _ = write!(hex, "{:02x}", b);
     }
-    let imports_preview: String = verdict.imports.iter().take(8).cloned().collect::<Vec<_>>().join(", ");
+    let imports_preview: String =
+        verdict.imports.iter().take(12).cloned().collect::<Vec<_>>().join(", ");
+    let sections_preview: String =
+        verdict.sections.iter().take(6).cloned().collect::<Vec<_>>().join(", ");
     let body = format!(
-        "Wow.exe loaded a NON-CANONICAL Warden module.\n\n\
+        "The server wants Wow.exe to load a NON-CANONICAL Warden module.\n\n\
          MD5: {}\n\
-         Verdict: {}\n\
-         Imports (first 8): {}\n\n\
+         Verdict: {}\n\n\
+         Imports (first 12):\n  {}\n\n\
+         Sections (first 6):\n  {}\n\n\
          Canonical Blizzard 3.3.5a Win Warden MD5 is\n\
-         79C0768D657977D697E10BAD956CCED1.\n\n\
-         The full module bytes were saved to\n\
+         79C0768D657977D697E10BAD956CCED1.\n\
+         Anything else is a custom module that this server has\n\
+         crafted; it will run as native code inside Wow.exe with\n\
+         your Windows user's full privileges.\n\n\
+         Full module bytes saved to\n\
          %APPDATA%\\wow-rce-watcher\\modules\\{}.bin\n\
-         for offline inspection.\0",
-        hex, verdict.reason, imports_preview, hex
+         for offline inspection.\n\n\
+         ALLOW this module to load?\0",
+        hex, verdict.reason, imports_preview, sections_preview, hex
     );
-    let title = "wow-client-toolkit: non-canonical Warden module\0";
-    // Spawn so we don't block the hook path.
-    let body_owned = body.clone();
-    let title_owned = title.to_string();
-    std::thread::spawn(move || {
-        unsafe {
-            MessageBoxA(
-                0,
-                body_owned.as_ptr(),
-                title_owned.as_ptr(),
-                MB_OK | MB_ICONWARNING,
-            );
-        }
-    });
+    let title = "wow-client-toolkit: server wants to load Warden module\0";
+    let r = unsafe {
+        MessageBoxA(
+            0,
+            body.as_ptr(),
+            title.as_ptr(),
+            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TOPMOST | MB_SYSTEMMODAL,
+        )
+    };
+    if r == 0 {
+        // MessageBoxA failed (no interactive desktop, etc.) --
+        // fail safe: reject the module.
+        return false;
+    }
+    r == IDYES as i32
 }
 
 fn inspect_buffer(buf: *const u8) -> decision::Verdict {
