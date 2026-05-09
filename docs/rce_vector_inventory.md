@@ -188,8 +188,14 @@ Planned additions:
    |---|---|---|
    | `0x00412237` | SAFE | Tiny header validator (`cmp word [ecx], 0x5A4D / cmp dword [eax + 0x3C], 'PE\0\0' / ret`). Returns 1/0. No mapping. |
    | `0x0077D293` | SAFE | PE-section walker for offset-resolution (no VirtualAlloc / VirtualProtect, just walks section headers to find which section a file offset lives in). |
-   | `0x0077E240` | **NEEDS FOLLOW-UP** | Validates `MZ` + checks two magic words at `+0x38` (`0xB74F`) and `+0x3A` (`0x2D98`) -- looks like a Microsoft signature check (Rich/DanS or authenticode), then walks to PE32/PE32+ optional-header magic. Calls into a sub-function at `0x0077E18F`-ish via `e8 fa fe ff ff`. **The sub-call may or may not load the buffer**; needs decompile. |
-   | `0x00993527` | NEEDS FOLLOW-UP | Higher-VA region, MZ check on stack-local `[ebp - 4]`. Less clear at first glance. |
+   | `0x0077E240` | SAFE after follow-up | Validates `MZ` + checks two magic words at `+0x38` (`0xB74F`) and `+0x3A` (`0x2D98`) (Microsoft Rich/DanS-style validator), then walks to PE32/PE32+ optional-header magic. The sub-calls into `0x0077E10D` / `0x0077E18F` are PE-resource-directory walkers (`*0x1C` = 28-byte `IMAGE_RESOURCE_DIRECTORY_ENTRY` stride, no `VirtualAlloc` / `VirtualProtect`). **Validator + resource-table parser**, not a loader. |
+   | `0x00993527` | SAFE | MZ check on stack-local + further validation calls; no `VirtualAlloc` / `VirtualProtect` in the visible 256-byte window; structurally a parser/walker, not a loader. |
+
+   **Conclusion: `FUN_00872350` is the only manual PE loader in
+   Wow.exe.** Patch 2 closes the entire native-code-execution
+   class via Warden / mod-rce style payloads. The remaining RCE
+   risk lives in the write-primitive class (section 2 above) plus
+   any classes we haven't yet enumerated.
 2. Are any of the AUDIT-status sites in section 2 actually
    exploitable (LEA + loop + global-bound), or are they all
    safe-by-coincidence (destination = local stack var)? Manual
