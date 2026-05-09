@@ -164,11 +164,18 @@ write-windows to gain code execution, file-IO + HTTP exfil
 gets logged. That layer is correct independent of how many
 RCE primitives exist.
 
-Plus the 4 handlers at high-VA (`FUN_006d6d20`, `FUN_0080e1b0`,
-`FUN_006d0240`, `FUN_006d0460` etc.) which the audit flagged with
-score >= 5 but have **no static handler-address references** in
-the binary -- these are either dead code, runtime-built vtables,
-or non-packet-reachable (init code, asset loaders).
+Plus the 9 handlers at high-VA (`FUN_006d6d20`, `FUN_0080e1b0`,
+`FUN_006d0240`, `FUN_006d0460`, `FUN_006d0ab0`, `FUN_006d53b0`,
+`FUN_00755630`, `FUN_00753690`, `FUN_00768760`) which the audit
+flagged with score >= 5 but have **no static handler-address
+references** in the binary. Tier-2 trace via Ghidra reference-manager
+(`audit/scripts/find_indirect_refs.py`) found each is called by
+exactly ONE internal helper (e.g. `FUN_006deef0` -> `FUN_006d6d20`),
+NOT registered as a packet handler. Two of them aren't even
+defined as functions (probably middle-of-instruction false hits).
+Treated as **non-packet-reachable** for this audit; if any of
+the helper callers is itself reachable from a packet handler,
+re-classification needed.
 
 ### Mitigation strategy options
 

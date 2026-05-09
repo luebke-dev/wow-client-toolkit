@@ -431,6 +431,19 @@ struct SecurityPatch {
 ///    patches 1+2 in RAM and re-enable the classic RCE chain.
 ///    Capping the loop locks patches 1+2 in for the lifetime of
 ///    the process.
+///
+/// 4. **NEW (added 2026-05-09):** `MSG_GUILD_PERMISSIONS` handler
+///    `FUN_005cb9f0`: neutralize the four `local_c * 7` arithmetic
+///    sites that compute `&DAT_00c21e60 + local_c * 56` destinations
+///    for `GetUInt32` calls. Each site has a `sub ecx/edx, eax`
+///    (`2B C8` / `2B D0`) immediately after `lea ecx/edx, [eax*8 + 0]`
+///    -- the sub turns `eax * 8` into `eax * 7`. Replacing each `sub`
+///    with `xor reg, reg` (`33 C9` / `33 D2`) zeros the index reg
+///    so the LEA computes base + 0 = base. All four GetUInt32
+///    writes overlap at fixed addresses; the function still runs
+///    but no longer offers an attacker-controlled scaled write.
+///    Same severity as Patch 3 but for opcode `0x3FD` instead of
+///    `0x2C0`.
 const RCE_HARDENING_PATCHES: &[SecurityPatch] = &[
     SecurityPatch {
         offset: 0x000002A7,
@@ -449,6 +462,30 @@ const RCE_HARDENING_PATCHES: &[SecurityPatch] = &[
         expected: &[0x3B, 0x3D, 0xB0, 0xA5, 0xBE, 0x00],
         new: &[0x81, 0xFF, 0x50, 0x00, 0x00, 0x00],
         name: "rce.bg-positions-loop-cap",
+    },
+    SecurityPatch {
+        offset: 0x001CAE34,
+        expected: &[0x2B, 0xC8],
+        new: &[0x33, 0xC9],
+        name: "rce.guild-permissions-arith-1",
+    },
+    SecurityPatch {
+        offset: 0x001CAE4F,
+        expected: &[0x2B, 0xC8],
+        new: &[0x33, 0xC9],
+        name: "rce.guild-permissions-arith-2",
+    },
+    SecurityPatch {
+        offset: 0x001CAE8A,
+        expected: &[0x2B, 0xD0],
+        new: &[0x33, 0xD2],
+        name: "rce.guild-permissions-arith-3",
+    },
+    SecurityPatch {
+        offset: 0x001CAEA8,
+        expected: &[0x2B, 0xD0],
+        new: &[0x33, 0xD2],
+        name: "rce.guild-permissions-arith-4",
     },
 ];
 
