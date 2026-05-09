@@ -36,6 +36,7 @@ use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 mod api_hooks;
 mod bg_handler;
 mod decision;
+mod handler_observe;
 mod hook;
 mod log;
 mod pe;
@@ -123,6 +124,13 @@ fn install() -> Result<(), InstallError> {
             "bg-handler hook install failed: {e}"
         )));
     }
+
+    // Install per-handler observation hooks for the 3 newly-found
+    // BG-positions class arbitrary-write handlers (GUILD_PERMISSIONS,
+    // GUILD_ROSTER MOTD count, GUILD_BANK_LIST tab id). Each logs
+    // the packet-supplied count + flags an anomaly if it exceeds
+    // the AC-side maximum.
+    handler_observe::install_all();
 
     // Install detour-style observe hooks on file-IO + HTTP APIs.
     // Catches both Wow's own IAT-routed calls AND server-pushed

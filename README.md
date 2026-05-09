@@ -200,7 +200,7 @@ WINEPREFIX=~/.wine wine wow-rce-watcher.exe drive_c/wow/Wow_safe.exe
 
 The launcher spawns Wow.exe with `CREATE_SUSPENDED`, injects the
 DLL via `CreateRemoteThread + LoadLibraryW`, then resumes the main
-thread. The DLL installs four classes of hook on `DLL_PROCESS_ATTACH`:
+thread. The DLL installs five classes of hook on `DLL_PROCESS_ATTACH`:
 
 1. **Manual Warden PE loader** (`FUN_00872350`). Per-module
    Yes/No prompt for non-canonical modules; canonical Blizzard
@@ -210,12 +210,30 @@ thread. The DLL installs four classes of hook on `DLL_PROCESS_ATTACH`:
 2. **MSG_BATTLEGROUND_PLAYER_POSITIONS handler** (`FUN_0054B3F0`).
    Observation only -- logs every iteration count seen on the
    wire. Patch 3 is the safety net.
-3. **Win32 API detour hooks** (`kernel32!CreateFileA`,
-   `wininet!InternetOpenA`, `wininet!HttpSendRequestA`). Catch
-   both Wow's IAT-routed calls AND server-shellcode-pushed
-   calls via `GetProcAddress`. Used for browser-history exfil
-   detection.
-4. **PE-buffer dump-to-disk**. Every PE-shaped buffer the loader
+3. **Per-handler observation hooks** for the 3 newly-found
+   BG-positions class arbitrary-write handlers
+   (`MSG_GUILD_PERMISSIONS`, `SMSG_GUILD_ROSTER` MOTD count,
+   `SMSG_GUILD_BANK_LIST` tab id). Each logs the
+   packet-supplied count + flags an `handler_anomaly` event if
+   the count exceeds the AC-side maximum. Patches 4+5 still
+   cap the actual writes; this adds the audit trail for
+   exploit attempts.
+4. **Win32 API detour hooks** (8 functions across kernel32,
+   wininet, advapi32, shell32):
+   - `CreateFileA` -- file paths the client opens (catches
+     browser-history theft via `\Google\Chrome\User Data\
+     Default\History` etc.)
+   - `InternetOpenA` + `HttpSendRequestA` -- HTTP exfil
+   - `ShellExecuteA` + `CreateProcessA` -- process spawn
+     (Wow.exe never calls these normally; any call = strong
+     shellcode signal)
+   - `LoadLibraryA` -- dynamic DLL loading from shellcode
+   - `RegOpenKeyExA` + `RegSetValueExA` -- registry
+     persistence / recon
+   Detours patch the API entry point itself, so they catch
+   BOTH Wow's IAT-routed calls AND server-shellcode-pushed
+   calls via `GetProcAddress`.
+5. **PE-buffer dump-to-disk**. Every PE-shaped buffer the loader
    sees is hashed + persisted. Idempotent (same MD5 = same file).
 
 Audit log at `%APPDATA%\wow-rce-watcher\events.jsonl`:
@@ -230,6 +248,9 @@ Audit log at `%APPDATA%\wow-rce-watcher\events.jsonl`:
 {"ts":1714312420,"kind":"module_blocked","md5":"deadbeef...","verdict":"...","note":"user rejected the non-canonical Warden module; loader returned 0"}
 {"ts":1714312500,"kind":"api_call","api":"CreateFileA","path":"C:\\Users\\X\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History"}
 {"ts":1714312600,"kind":"bg_handler_called","count":"40","note":"legit BG-positions packet, count=40"}
+{"ts":1714312700,"kind":"handler_called","handler":"MSG_GUILD_PERMISSIONS","opcode":"0x03FD","count":"5","threshold":"16","note":"legit packet, count=5"}
+{"ts":1714312800,"kind":"handler_anomaly","handler":"SMSG_GUILD_ROSTER (MOTD count)","opcode":"0x008A","count":"4294967295","threshold":"16","note":"EXPLOIT ATTEMPT: SMSG_GUILD_ROSTER sent count=4294967295 (> 16 expected max). Static patch likely caps the actual write; this is the audit trail."}
+{"ts":1714312900,"kind":"api_call","api":"ShellExecuteA","op":"open","file":"calc.exe","params":""}
 ```
 
 ---

@@ -57,6 +57,16 @@ static mut TRAMP_CREATE_FILE_A: usize = 0;
 static mut TRAMP_INTERNET_OPEN_A: usize = 0;
 #[unsafe(no_mangle)]
 static mut TRAMP_HTTP_SEND_REQUEST_A: usize = 0;
+#[unsafe(no_mangle)]
+static mut TRAMP_SHELL_EXECUTE_A: usize = 0;
+#[unsafe(no_mangle)]
+static mut TRAMP_CREATE_PROCESS_A: usize = 0;
+#[unsafe(no_mangle)]
+static mut TRAMP_LOAD_LIBRARY_A: usize = 0;
+#[unsafe(no_mangle)]
+static mut TRAMP_REG_OPEN_KEY_EX_A: usize = 0;
+#[unsafe(no_mangle)]
+static mut TRAMP_REG_SET_VALUE_EX_A: usize = 0;
 
 /// Per-thread reentry guard. The observe callbacks may incidentally
 /// trigger more file IO (if logging hits a file the observer also
@@ -100,6 +110,36 @@ pub fn install_all() {
         "HttpSendRequestA",
         hook_http_send_request_a as *const () as usize,
         &raw mut TRAMP_HTTP_SEND_REQUEST_A,
+    );
+    install_one(
+        "shell32.dll",
+        "ShellExecuteA",
+        hook_shell_execute_a as *const () as usize,
+        &raw mut TRAMP_SHELL_EXECUTE_A,
+    );
+    install_one(
+        "kernel32.dll",
+        "CreateProcessA",
+        hook_create_process_a as *const () as usize,
+        &raw mut TRAMP_CREATE_PROCESS_A,
+    );
+    install_one(
+        "kernel32.dll",
+        "LoadLibraryA",
+        hook_load_library_a as *const () as usize,
+        &raw mut TRAMP_LOAD_LIBRARY_A,
+    );
+    install_one(
+        "advapi32.dll",
+        "RegOpenKeyExA",
+        hook_reg_open_key_ex_a as *const () as usize,
+        &raw mut TRAMP_REG_OPEN_KEY_EX_A,
+    );
+    install_one(
+        "advapi32.dll",
+        "RegSetValueExA",
+        hook_reg_set_value_ex_a as *const () as usize,
+        &raw mut TRAMP_REG_SET_VALUE_EX_A,
     );
 }
 
@@ -212,6 +252,97 @@ extern "C" fn observe_http_send_request_a(headers_ptr: *const u8, headers_len: u
     });
 }
 
+// ShellExecuteA(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd)
+// Logs lpOperation + lpFile + lpParameters. Wow.exe never calls
+// this normally; any call = strong shellcode signal.
+extern "C" fn observe_shell_execute_a(
+    op: *const u8,
+    file: *const u8,
+    params: *const u8,
+) {
+    enter_observe(|| {
+        let op = unsafe { read_cstr_a(op, 64) };
+        let file = unsafe { read_cstr_a(file, 512) };
+        let params = unsafe { read_cstr_a(params, 512) };
+        log::write_event(&log::Event::api_call(
+            "ShellExecuteA",
+            &[("op", &op), ("file", &file), ("params", &params)],
+        ));
+    });
+}
+
+// CreateProcessA(lpApplicationName, lpCommandLine, ...)
+// Logs both. Wow.exe never spawns child processes during gameplay.
+extern "C" fn observe_create_process_a(app_name: *const u8, cmd_line: *const u8) {
+    enter_observe(|| {
+        let app = unsafe { read_cstr_a(app_name, 512) };
+        let cmd = unsafe { read_cstr_a(cmd_line, 1024) };
+        log::write_event(&log::Event::api_call(
+            "CreateProcessA",
+            &[("app", &app), ("cmd", &cmd)],
+        ));
+    });
+}
+
+// LoadLibraryA(lpLibFileName)
+// High call frequency at startup, but should taper after init.
+// Server-shellcode resolving extra DLLs would call this.
+extern "C" fn observe_load_library_a(lib: *const u8) {
+    enter_observe(|| {
+        let lib = unsafe { read_cstr_a(lib, 512) };
+        log::write_event(&log::Event::api_call(
+            "LoadLibraryA",
+            &[("lib", &lib)],
+        ));
+    });
+}
+
+// RegOpenKeyExA(hKey, lpSubKey, ulOptions, samDesired, phkResult)
+// Logs lpSubKey. Wow.exe touches a few well-known keys at startup
+// (HKLM\Software\Blizzard, etc.); any other path = persistence /
+// recon attempt.
+extern "C" fn observe_reg_open_key_ex_a(_hkey: u32, sub_key: *const u8) {
+    enter_observe(|| {
+        let key = unsafe { read_cstr_a(sub_key, 512) };
+        log::write_event(&log::Event::api_call(
+            "RegOpenKeyExA",
+            &[("sub_key", &key)],
+        ));
+    });
+}
+
+// RegSetValueExA(hKey, lpValueName, Reserved, dwType, lpData, cbData)
+// Logs lpValueName + first bytes of lpData. Wow.exe writes its
+// install path / config at most once; persistent malware would
+// write run keys.
+extern "C" fn observe_reg_set_value_ex_a(
+    _hkey: u32,
+    value_name: *const u8,
+    _reserved: u32,
+    dtype: u32,
+    data: *const u8,
+    cb_data: u32,
+) {
+    enter_observe(|| {
+        let name = unsafe { read_cstr_a(value_name, 512) };
+        let data_preview = if !data.is_null() && cb_data > 0 {
+            let n = (cb_data as usize).min(256);
+            unsafe { read_cstr_a(data, n) }
+        } else {
+            String::new()
+        };
+        log::write_event(&log::Event::api_call(
+            "RegSetValueExA",
+            &[
+                ("value_name", &name),
+                ("data_type", &dtype.to_string()),
+                ("data_size", &cb_data.to_string()),
+                ("data_first_256", &data_preview),
+            ],
+        ));
+    });
+}
+
 // ---------------------------------------------------------------
 // Naked-asm trampoline entries. Each preserves all registers +
 // flags, reads the relevant arg(s) from the stdcall arg layout,
@@ -288,6 +419,122 @@ extern "C" fn hook_http_send_request_a() {
         "jmp dword ptr [{tramp}]",
         observe = sym observe_http_send_request_a,
         tramp = sym TRAMP_HTTP_SEND_REQUEST_A,
+    );
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn hook_shell_execute_a() {
+    naked_asm!(
+        "pushad",
+        "pushfd",
+        // ShellExecuteA(hwnd, lpOperation, lpFile, lpParameters,
+        //               lpDirectory, nShowCmd)
+        // args at +0x28 (hwnd), +0x2C, +0x30, +0x34, ...
+        "mov eax, [esp + 0x2C]",       // arg2 = lpOperation
+        "mov ecx, [esp + 0x30]",       // arg3 = lpFile
+        "mov edx, [esp + 0x34]",       // arg4 = lpParameters
+        "push edx",
+        "push ecx",
+        "push eax",
+        "call {observe}",
+        "add esp, 12",
+        "popfd",
+        "popad",
+        "jmp dword ptr [{tramp}]",
+        observe = sym observe_shell_execute_a,
+        tramp = sym TRAMP_SHELL_EXECUTE_A,
+    );
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn hook_create_process_a() {
+    naked_asm!(
+        "pushad",
+        "pushfd",
+        // CreateProcessA(lpApplicationName, lpCommandLine, ...)
+        "mov eax, [esp + 0x28]",       // arg1 = lpApplicationName
+        "mov ecx, [esp + 0x2C]",       // arg2 = lpCommandLine
+        "push ecx",
+        "push eax",
+        "call {observe}",
+        "add esp, 8",
+        "popfd",
+        "popad",
+        "jmp dword ptr [{tramp}]",
+        observe = sym observe_create_process_a,
+        tramp = sym TRAMP_CREATE_PROCESS_A,
+    );
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn hook_load_library_a() {
+    naked_asm!(
+        "pushad",
+        "pushfd",
+        // LoadLibraryA(lpLibFileName)
+        "mov eax, [esp + 0x28]",       // arg1 = lpLibFileName
+        "push eax",
+        "call {observe}",
+        "add esp, 4",
+        "popfd",
+        "popad",
+        "jmp dword ptr [{tramp}]",
+        observe = sym observe_load_library_a,
+        tramp = sym TRAMP_LOAD_LIBRARY_A,
+    );
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn hook_reg_open_key_ex_a() {
+    naked_asm!(
+        "pushad",
+        "pushfd",
+        // RegOpenKeyExA(hKey, lpSubKey, ulOptions, samDesired, phkResult)
+        "mov eax, [esp + 0x28]",       // arg1 = hKey
+        "mov ecx, [esp + 0x2C]",       // arg2 = lpSubKey
+        "push ecx",
+        "push eax",
+        "call {observe}",
+        "add esp, 8",
+        "popfd",
+        "popad",
+        "jmp dword ptr [{tramp}]",
+        observe = sym observe_reg_open_key_ex_a,
+        tramp = sym TRAMP_REG_OPEN_KEY_EX_A,
+    );
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn hook_reg_set_value_ex_a() {
+    naked_asm!(
+        "pushad",
+        "pushfd",
+        // RegSetValueExA(hKey, lpValueName, Reserved, dwType,
+        //                lpData, cbData)
+        "mov eax, [esp + 0x28]",       // arg1 = hKey
+        "mov ecx, [esp + 0x2C]",       // arg2 = lpValueName
+        "mov edx, [esp + 0x30]",       // arg3 = Reserved
+        "mov esi, [esp + 0x34]",       // arg4 = dwType
+        "mov edi, [esp + 0x38]",       // arg5 = lpData
+        "mov ebx, [esp + 0x3C]",       // arg6 = cbData
+        "push ebx",
+        "push edi",
+        "push esi",
+        "push edx",
+        "push ecx",
+        "push eax",
+        "call {observe}",
+        "add esp, 24",
+        "popfd",
+        "popad",
+        "jmp dword ptr [{tramp}]",
+        observe = sym observe_reg_set_value_ex_a,
+        tramp = sym TRAMP_REG_SET_VALUE_EX_A,
     );
 }
 

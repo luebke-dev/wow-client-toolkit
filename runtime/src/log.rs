@@ -219,6 +219,69 @@ impl Event {
         }
     }
 
+    /// Logged once per per-handler observation hook install
+    /// (handler_observe::install_all).
+    pub fn handler_hook_installed(name: &'static str, site_va: usize) -> Self {
+        Self {
+            kind: "handler_hook_installed",
+            fields: vec![
+                ("handler".into(), name.into()),
+                ("site".into(), format!("0x{:08x}", site_va)),
+            ],
+        }
+    }
+
+    /// Logged when a per-handler hook fails to install (prologue
+    /// mismatch, JMP write failed, etc.).
+    pub fn handler_hook_failed(
+        name: &'static str,
+        site_va: usize,
+        reason: &str,
+    ) -> Self {
+        Self {
+            kind: "handler_hook_failed",
+            fields: vec![
+                ("handler".into(), name.into()),
+                ("site".into(), format!("0x{:08x}", site_va)),
+                ("reason".into(), sanitize(reason)),
+            ],
+        }
+    }
+
+    /// Logged from each per-handler observer callback. `count` is
+    /// the value the server just put on the wire for the handler's
+    /// list-count / tab-id / similar attacker-controlled field.
+    /// `anomaly` indicates the value exceeded the documented AC
+    /// maximum for that opcode -- a strong signal the server is
+    /// trying to weaponize the vuln.
+    pub fn handler_called(
+        name: &'static str,
+        opcode: u32,
+        count: u32,
+        threshold: u32,
+        anomaly: bool,
+    ) -> Self {
+        let kind = if anomaly { "handler_anomaly" } else { "handler_called" };
+        let note = if anomaly {
+            format!(
+                "EXPLOIT ATTEMPT: {} sent count={} (> {} expected max). Static patch likely caps the actual write; this is the audit trail.",
+                name, count, threshold
+            )
+        } else {
+            format!("legit packet, count={}", count)
+        };
+        Self {
+            kind,
+            fields: vec![
+                ("handler".into(), name.into()),
+                ("opcode".into(), format!("0x{:04X}", opcode)),
+                ("count".into(), count.to_string()),
+                ("threshold".into(), threshold.to_string()),
+                ("note".into(), note),
+            ],
+        }
+    }
+
     /// Logged once per attempted detour install on a Win32 API.
     pub fn api_hook_installed(dll: &str, fn_name: &str, addr: usize) -> Self {
         Self {
