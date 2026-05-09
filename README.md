@@ -17,7 +17,7 @@ independent of any private-server project:
 
 | Component | Output | Target | Role |
 |---|---|---|---|
-| `patcher/` | `wow-exe-patcher` | host | **Static byte patcher** for Wow.exe. Closes all three vectors of the documented RCE chain on disk so the binary is hard against any server before it ever runs. Also bundles tswow-style feature toggles + version/build rewrites. |
+| `patcher/` | `wow-exe-patcher` | host | **Static byte patcher** for Wow.exe. Closes the three vectors of the documented RCE chain (`.zdata` no-execute / Warden-loader no-execute / BG-positions loop cap) **plus two newer same-shape sister vulns discovered by `audit/`** (`MSG_GUILD_PERMISSIONS` arithmetic-neutralization, `SMSG_GUILD_ROSTER` MOTD loop-cap). Also bundles tswow-style feature toggles + version/build rewrites. |
 | `runtime/` | `wow_rce_watcher.dll` + `wow-rce-watcher.exe` | i686-pc-windows-gnu | **Runtime observer** loaded into Wow.exe via DLL injection. Hooks the manual Warden module loader and the BG-positions handler, logs every server-supplied PE buffer + every BG packet's iteration count, dumps the raw module bytes to disk for offline analysis. **No patching, no blocking** -- pure forensic logging. Safety is the static patcher's job. |
 | `audit/` | Ghidra Jython scripts | host | **Static audit / re-derivation** scripts. Locate write-primitive call sites, candidate Warden hook points, IAT entries needed for shellcode tracing. Used to validate the patch byte tables and to scout for sister-vulnerabilities to close. |
 
@@ -70,6 +70,37 @@ The bypass sequence:
 target now stays within the legitimate `dword_BEA180` array bounds
 (max addr `0xBEA570`). Patches 1 and 2 stay locked in for the
 lifetime of the process.
+
+### Vectors 4 + 5 (sister vulnerabilities found by `audit/`)
+
+Tier-1 + tier-2 audit of every `CDataStore::Get*` caller in the
+binary (see `docs/rce_vector_inventory.md`) discovered two
+**additional** packet handlers with the BG-positions arithmetic
+shape, neither covered by the original `RCEPatcher`:
+
+| # | Opcode | Handler | What it gives the attacker |
+|---|---|---|---|
+| 4 | `0x3FD` `MSG_GUILD_PERMISSIONS` | `FUN_005CB9F0` | `local_c = GetUInt32` from packet, four `GetUInt32` writes per packet to `&DAT_00C21E60 + local_c * 56`. Server picks `local_c` so destination wraps to any 8-byte-aligned address in 32-bit space. |
+| 5 | `0x08A` `SMSG_GUILD_ROSTER` | `FUN_005CC5D0` | MOTD-records loop bound `DAT_00C22AB8 = GetUInt32` from packet, per-iteration writes 14 dwords to `&DAT_00C21E64 + i * 56`. Same shape as Patch 3 with a different multiplier. |
+
+Patch 4 neutralises the four `local_c * 7` arithmetic sites in
+`FUN_005CB9F0` by replacing each `sub reg, eax` (`2B C8` /
+`2B D0`) with `xor reg, reg` (`33 C9` / `33 D2`) -- same byte
+length, kills the multiplier so all four `GetUInt32` writes
+overlap at fixed addresses.
+
+Patch 5 caps the MOTD loop at 10 iterations -- the value the
+in-source post-loop sanity check `if (9 < local_c) goto cleanup`
+implies the original developer intended (the check just fires
+AFTER the writes, useless as a bounds check).
+
+A third candidate (`SMSG_GUILD_BANK_LIST`, opcode `0x3E8`) is
+an out-of-bounds-pointer-class vuln (byte tab-id used as
+unchecked array index, fetched pointer becomes write base). The
+straightforward in-place patch doesn't fit (the dangerous load
+site is referenced from 10+ places in the function); a clean fix
+needs a JMP-rel32 trampoline. Tracked in the inventory as Patch 6
+deferred.
 
 ### Why the static patches and not just a runtime detector?
 

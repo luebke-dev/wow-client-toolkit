@@ -153,6 +153,19 @@ pending realloc-failure-mode confirmation). Minimal additions:
   loop and thus is useless as a bounds check).
 - **Patch 6** (SMSG_GUILD_BANK_LIST): cap `local_5` (tab-id)
   after the `GetUInt8(&local_5)` to max 7.
+  - **Status: deferred.** The straightforward patch (mask local_5
+    immediately after GetUInt8) needs 4 bytes after the call but
+    the call is followed immediately by another instruction with no
+    NOP padding. The exploit primitive is also referenced from
+    multiple load sites (`movzx eax, byte [ebp-1]` + `shl eax, 4`)
+    inside a loop body, so a single-site byte-patch leaves the
+    inner-loop indexing vulnerable. A clean fix needs either:
+    (a) a 5-byte JMP-rel32 trampoline that masks `local_5` and
+    returns; (b) per-load-site patching of every `[ebp-1]` read
+    in the function (10+ sites); (c) a runtime-DLL-level hook
+    that replaces the GetUInt8 destination with a clamped scratch
+    slot. None fits the 1-3 byte surgical patch model that
+    Patches 1-5 use.
 - **Patch 7+8** (RAID_INSTANCE_INFO, EXPECTED_SPAM_RECORDS):
   cap loop counts to AC documented maxima.
 
