@@ -39,7 +39,7 @@ PoC2.0, brian8544's PoC1) plus original analysis for Vector 3
 The 3.3.5a Wow.exe contains an RCE chain that has been historically
 known to a small set of actors in the WoW emulation scene. Public
 disclosure landed via the
-[mod-rce](https://github.com/azerothcore-wotlk-modules/mod-rce) AC
+[mod-rce](https://github.com/brian8544/mod-rce) AC
 module. The chain combines three separate failures in the client:
 
 | # | Name | Where | What it gives the attacker |

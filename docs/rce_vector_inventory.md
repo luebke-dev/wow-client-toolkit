@@ -179,13 +179,22 @@ Planned additions:
 
 1. Does the writeup's Vector-2 cover the only manual PE loader,
    or are there sister loaders elsewhere in `0x00870000-0x00880000`?
-   `audit/scripts/find_warden_targets.py` should be extended to
-   sweep for `MZ`-magic-checking code blocks.
+   `audit/scripts/find_pe_loaders.py` searches for any code path
+   that checks the `MZ` magic via the common encodings. **Latest
+   refined search finds 4 PE-checking functions in .text** but
+   each is classified after manual decompile inspection:
+
+   | VA | Verdict | Notes |
+   |---|---|---|
+   | `0x00412237` | SAFE | Tiny header validator (`cmp word [ecx], 0x5A4D / cmp dword [eax + 0x3C], 'PE\0\0' / ret`). Returns 1/0. No mapping. |
+   | `0x0077D293` | SAFE | PE-section walker for offset-resolution (no VirtualAlloc / VirtualProtect, just walks section headers to find which section a file offset lives in). |
+   | `0x0077E240` | **NEEDS FOLLOW-UP** | Validates `MZ` + checks two magic words at `+0x38` (`0xB74F`) and `+0x3A` (`0x2D98`) -- looks like a Microsoft signature check (Rich/DanS or authenticode), then walks to PE32/PE32+ optional-header magic. Calls into a sub-function at `0x0077E18F`-ish via `e8 fa fe ff ff`. **The sub-call may or may not load the buffer**; needs decompile. |
+   | `0x00993527` | NEEDS FOLLOW-UP | Higher-VA region, MZ check on stack-local `[ebp - 4]`. Less clear at first glance. |
 2. Are any of the AUDIT-status sites in section 2 actually
    exploitable (LEA + loop + global-bound), or are they all
    safe-by-coincidence (destination = local stack var)? Manual
    review needed for any score>=5 site.
 3. DBC parser bounds-checking: AzerothCore + the original Blizzard
    parser both trust the row count from the file header. With
-   custom DBC files distributed via `cluster.assets`, does the
-   client's load path validate `row_count * row_size <= file_size`?
+   custom server-supplied DBC files, does the client's load path
+   validate `row_count * row_size <= file_size`?
